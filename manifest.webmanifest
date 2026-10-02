@@ -1,0 +1,10 @@
+{
+  "name": "블로그클립",
+  "short_name": "블로그클립",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f5f7",
+  "theme_color": "#111111",
+  "lang": "ko-KR",
+  "icons": []
+}

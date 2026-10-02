@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111111">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="블로그클립">
+<link rel="manifest" href="manifest.webmanifest">
+<title>블로그클립</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f5f5f7;color:#151515;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif}
+.app{max-width:720px;margin:auto;padding:calc(env(safe-area-inset-top) + 18px) 15px calc(env(safe-area-inset-bottom) + 30px)}
+h1{font-size:25px;margin:0 0 4px;font-weight:850}.desc{color:#777;font-size:13px;margin-bottom:18px}
+.card{background:white;border:1px solid #e8e8eb;border-radius:18px;padding:16px;margin:12px 0}
+label{display:block;font-weight:750;font-size:14px;margin-bottom:8px}
+textarea,input{width:100%;font:inherit;border:1px solid #ddd;border-radius:12px;padding:12px;background:#fff}
+textarea{min-height:190px;line-height:1.55;resize:vertical}
+button{border:0;border-radius:13px;padding:13px 16px;font-weight:800;font-size:15px;background:#111;color:white;width:100%;margin-top:9px}
+button.secondary{background:#ededf0;color:#111}.hint{font-size:12px;color:#888;line-height:1.5;margin-top:8px}
+#photos{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:10px}.photo{aspect-ratio:1;border-radius:10px;overflow:hidden;position:relative;background:#eee}.photo img{width:100%;height:100%;object-fit:cover}.photo i{position:absolute;top:4px;left:4px;background:#000b;color:#fff;border-radius:7px;padding:3px 6px;font-size:11px;font-style:normal}
+.scene{padding:12px 0;border-top:1px solid #eee}.scene:first-child{border-top:0}.scene strong{font-size:13px}.scene p{font-size:13px;line-height:1.45;margin:5px 0;color:#555}
+#preview{width:min(82vw,360px);height:auto;aspect-ratio:9/16;background:#222;border-radius:18px;display:block;margin:8px auto}
+.status{font-size:13px;text-align:center;color:#666;margin-top:8px}.bar{height:7px;background:#eee;border-radius:99px;overflow:hidden;margin-top:9px}.bar>div{height:100%;width:0;background:#111}
+.install{background:#fff8dc;border:1px solid #f0dda0;border-radius:13px;padding:11px;font-size:12px;line-height:1.55}
+</style>
+</head>
+<body>
+<div class="app">
+<h1>블로그클립</h1>
+<div class="desc">블로그 글 + 내 사진으로 9:16 클립 구성 만들기</div>
+
+<div class="install"><b>아이폰에서 앱처럼 쓰려면</b><br>
+Safari에서 이 사이트를 연 뒤 <b>공유 → 홈 화면에 추가</b>를 선택하세요.</div>
+
+<section class="card">
+<label>① 블로그 본문</label>
+<textarea id="body" placeholder="네이버 블로그 본문을 그대로 붙여넣으세요."></textarea>
+<input id="videoTitle" placeholder="영상 제목 (선택)" style="margin-top:8px">
+<button id="make">자동 구성 만들기</button>
+</section>
+
+<section class="card">
+<label>② 실제 사진 선택</label>
+<input id="images" type="file" accept="image/*" multiple>
+<div id="photos"></div>
+<div class="hint">사진을 넣으면 앞쪽 장면부터 자동 배치합니다. 사진이 부족한 장면은 정보형 텍스트 화면으로 만듭니다.</div>
+</section>
+
+<section class="card">
+<label>③ 자동 장면 구성</label>
+<div id="scenes"><div class="hint">본문을 넣고 자동 구성 만들기를 눌러주세요.</div></div>
+</section>
+
+<section class="card">
+<label>④ 미리보기</label>
+<canvas id="preview" width="540" height="960"></canvas>
+<div class="status" id="status">대기 중</div>
+<div class="bar"><div id="progress"></div></div>
+<button class="secondary" id="prev">장면 미리보기</button>
+<button id="makeVideo">영상 만들기</button>
+</section>
+</div>
+
+<script>
+let sceneList=[], photoList=[], current=0;
+const $=id=>document.getElementById(id);
+const canvas=$('preview'),ctx=canvas.getContext('2d');
+
+function clean(s){return s.replace(/\s+/g,' ').trim()}
+function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function splitSentences(text){
+  let a=text.split(/\n+|(?<=[.!?。！？])\s+/).map(clean).filter(x=>x.length>7);
+  if(a.length<4){
+    let w=clean(text).split(' ');
+    let n=Math.min(8,Math.max(4,Math.ceil(w.length/25)));
+    a=[]; for(let i=0;i<n;i++) a.push(w.slice(Math.floor(i*w.length/n),Math.floor((i+1)*w.length/n)).join(' '));
+  }
+  return a.slice(0,8)
+}
+function makeScenes(){
+  const text=clean($('body').value);
+  if(!text){$('status').textContent='본문을 먼저 넣어주세요.';return}
+  const t=clean($('videoTitle').value)||text.slice(0,30);
+  const p=splitSentences(text);
+  sceneList=[{label:'후킹',text:t}].concat(p.map((x,i)=>({label:'장면 '+(i+1),text:x})));
+  $('scenes').innerHTML=sceneList.map((s,i)=>`<div class="scene"><strong>${i+1}. ${s.label}</strong><p>${escapeHtml(s.text)}</p></div>`).join('');
+  current=0;draw(current);$('status').textContent=sceneList.length+'개 장면으로 구성했어요.';
+}
+function renderPhotos(){
+  $('photos').innerHTML=photoList.map((p,i)=>`<div class="photo"><img src="${p.url}"><i>${i+1}</i></div>`).join('');
+}
+$('images').addEventListener('change',e=>{
+  photoList=Array.from(e.target.files).filter(f=>f.type.startsWith('image/')).map(f=>({file:f,url:URL.createObjectURL(f)}));
+  renderPhotos(); if(sceneList.length) draw(current);
+});
+$('make').addEventListener('click',makeScenes);
+
+function wrap(text,max,size){
+  ctx.font=`800 ${size}px -apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif`;
+  const words=text.split(' '),lines=[];let line='';
+  for(const word of words){let test=line?line+' '+word:word;if(ctx.measureText(test).width>max&&line){lines.push(line);line=word}else line=test}
+  if(line)lines.push(line);return lines.slice(0,4)
+}
+async function draw(i){
+  if(!sceneList.length)return;
+  ctx.fillStyle='#111';ctx.fillRect(0,0,540,960);
+  const p=photoList[i-1];
+  if(p){
+    const img=new Image();img.src=p.url;await img.decode();
+    const scale=Math.max(540/img.width,960/img.height),w=img.width*scale,h=img.height*scale;
+    ctx.drawImage(img,(540-w)/2,(960-h)/2,w,h);
+    ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(0,0,540,960);
+  }
+  ctx.fillStyle='rgba(255,255,255,.94)';ctx.beginPath();ctx.roundRect(30,655,480,240,25);ctx.fill();
+  ctx.fillStyle='#111';const lines=wrap(sceneList[i].text,420,34);
+  ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='800 34px -apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif';
+  lines.forEach((l,n)=>ctx.fillText(l,270,780+(n-(lines.length-1)/2)*42));
+}
+$('prev').addEventListener('click',async()=>{
+  if(!sceneList.length){makeScenes();return}
+  current=(current+1)%sceneList.length;await draw(current);$('status').textContent=`장면 ${current+1}/${sceneList.length}`;
+});
+$('makeVideo').addEventListener('click',async()=>{
+  if(!sceneList.length){makeScenes();if(!sceneList.length)return}
+  if(!canvas.captureStream||!window.MediaRecorder){$('status').textContent='이 브라우저에서는 영상 생성 기능이 제한됩니다. 최신 Safari/Chrome을 사용해주세요.';return}
+  const stream=canvas.captureStream(30);
+  let mime='video/webm';
+  if(MediaRecorder.isTypeSupported('video/mp4'))mime='video/mp4';
+  const rec=new MediaRecorder(stream,{mimeType:mime});
+  const chunks=[];rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
+  const stopped=new Promise(r=>rec.onstop=r);rec.start();
+  for(let i=0;i<sceneList.length;i++){
+    await draw(i);$('progress').style.width=((i+1)/sceneList.length*100)+'%';$('status').textContent=`영상 제작 중 ${i+1}/${sceneList.length}`;
+    await new Promise(r=>setTimeout(r,2200));
+  }
+  rec.stop();await stopped;
+  const blob=new Blob(chunks,{type:mime}),url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='blogclip.webm';a.click();
+  $('status').textContent='영상 파일을 만들었습니다.';setTimeout(()=>URL.revokeObjectURL(url),5000);
+});
+</script>
+</body>
+</html>
