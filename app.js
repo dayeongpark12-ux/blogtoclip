@@ -28,6 +28,74 @@ function applySongs() {
   renderOutput();
 }
 
+async function findAlbumTracks(query) {
+  // 1단계: iTunes 앨범 엔터티 직접 검색
+  try {
+    let res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=album&country=KR&limit=5`);
+    let data = await res.json();
+    if (data.results && data.results.length > 0) {
+      const colId = data.results[0].collectionId;
+      const colName = data.results[0].collectionName;
+      const lookup = await fetch(`https://itunes.apple.com/lookup?id=${colId}&entity=song&country=KR`);
+      const lData = await lookup.json();
+      const songs = (lData.results || []).filter(item => item.wrapperType === 'track');
+      if (songs.length > 0) return { albumName: colName, tracks: songs.map(s => s.trackName.trim()) };
+    }
+  } catch (e) {}
+
+  // 2단계: 검색어 완화 (예: '의' 조사 제거 및 주요 키워드 추출)
+  const simplified = query.replace(/의\s*/g, ' ').replace(/[\(\)\[\]\-_]/g, ' ').trim();
+  if (simplified && simplified !== query) {
+    try {
+      let res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(simplified)}&entity=album&country=KR&limit=5`);
+      let data = await res.json();
+      if (data.results && data.results.length > 0) {
+        const colId = data.results[0].collectionId;
+        const colName = data.results[0].collectionName;
+        const lookup = await fetch(`https://itunes.apple.com/lookup?id=${colId}&entity=song&country=KR`);
+        const lData = await lookup.json();
+        const songs = (lData.results || []).filter(item => item.wrapperType === 'track');
+        if (songs.length > 0) return { albumName: colName, tracks: songs.map(s => s.trackName.trim()) };
+      }
+    } catch (e) {}
+  }
+
+  // 3단계: 곡 엔터티 검색을 통한 앨범 역추적 (앨범명이 곡명이나 시리즈명과 겹치는 경우)
+  try {
+    let res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&country=KR&limit=5`);
+    let data = await res.json();
+    if (data.results && data.results.length > 0) {
+      const colId = data.results[0].collectionId;
+      const colName = data.results[0].collectionName;
+      if (colId) {
+        const lookup = await fetch(`https://itunes.apple.com/lookup?id=${colId}&entity=song&country=KR`);
+        const lData = await lookup.json();
+        const songs = (lData.results || []).filter(item => item.wrapperType === 'track');
+        if (songs.length > 0) return { albumName: colName, tracks: songs.map(s => s.trackName.trim()) };
+      }
+    }
+  } catch (e) {}
+
+  // 4단계: 오픈 음악 데이터베이스 (MusicBrainz) 검색
+  try {
+    let mbRes = await fetch(`https://musicbrainz.org/ws/2/release/?query=${encodeURIComponent(query)}&fmt=json&limit=3`);
+    let mbData = await mbRes.json();
+    if (mbData.releases && mbData.releases.length > 0) {
+      const relId = mbData.releases[0].id;
+      const relName = mbData.releases[0].title;
+      let dRes = await fetch(`https://musicbrainz.org/ws/2/release/${relId}?inc=recordings&fmt=json`);
+      let dData = await dRes.json();
+      const list = [];
+      (dData.media || []).forEach(m => {
+        (m.tracks || []).forEach(tr => { if (tr.title) list.push(tr.title.trim()); });
+      });
+      if (list.length > 0) return { albumName: relName, tracks: list };
+    }
+  } catch (e) {}
+
+  return null;
+}
+
 $('searchAlbumBtn').onclick = async () => {
   const query = $('album').value.trim();
   if (!query) {
@@ -41,41 +109,22 @@ $('searchAlbumBtn').onclick = async () => {
   btn.textContent = '곡 불러오는 중…';
 
   try {
-    const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=album&country=KR&limit=5`);
-    const json = await res.json();
-    if (!json.results || json.results.length === 0) {
-      throw new Error('해당 앨범을 찾을 수 없습니다. 정확한 앨범명을 입력해 보세요.');
+    const result = await findAlbumTracks(query);
+    if (!result || !result.tracks || result.tracks.length === 0) {
+      throw new Error(`'${query}'에 대한 수록곡을 찾을 수 없습니다.\n\n💡 해결 팁:\n1. 조사('의')를 빼고 검색해 보세요 (예: '타요 씽씽극장' 또는 '타요')\n2. 아티스트명을 함께 넣어보세요 (예: '뽀로로 동요')\n3. 음원 사이트에서 복사한 곡 목록을 3번째 칸에 직접 붙여넣으셔도 바로 적용됩니다.`);
     }
 
-    const album = json.results[0];
-    const collectionId = album.collectionId;
-
-    const songsRes = await fetch(`https://itunes.apple.com/lookup?id=${collectionId}&entity=song&country=KR`);
-    const songsJson = await songsRes.json();
-    
-    const songItems = (songsJson.results || []).filter(item => item.wrapperType === 'track');
-    
-    if (songItems.length === 0) {
-      throw new Error('앨범은 찾았으나 수록곡 목록이 비어있습니다.');
-    }
-
-    $('songs').value = songItems.map(s => s.trackName.trim()).join('\n');
-    $('headline').value = album.collectionName;
+    $('songs').value = result.tracks.join('\n');
+    $('headline').value = result.albumName || query;
     
     applySongs();
-// 초기 실행 시 모든 곡 전체 체크 적용
-tracks.forEach((t, i) => { if (data[i]) data[i].selected = true; });
-renderTracks();
-renderEditors();
-renderOutput();
-    // 검색으로 새로 가져온 모든 수록곡 전체 선택(체크) 강제 적용
     tracks.forEach((t, i) => { if (data[i]) data[i].selected = true; });
     renderTracks();
     renderEditors();
     renderOutput();
-    alert(`[${album.collectionName}] 앨범에서 ${songItems.length}곡을 불러왔으며, 모든 곡이 추출 체크되었습니다.`);
+    alert(`[${result.albumName || query}] 앨범에서 ${result.tracks.length}곡을 불러왔으며, 모두 추출 체크되었습니다.`);
   } catch (err) {
-    alert('앨범 검색 실패: ' + err.message);
+    alert(err.message);
   } finally {
     btn.disabled = false;
     btn.textContent = '앨범 곡 불러오기';
