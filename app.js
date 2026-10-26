@@ -13,11 +13,13 @@ function applySongs() {
   data = {};
 
   tracks.forEach((t, i) => {
-    data[i] = oldByName[t.name] || {
-      selected: true,
-      visibleCount: 3,
-      allResults: [],
-      candidates: []
+    const existing = oldByName[t.name];
+    data[i] = {
+      // 기본값은 무조건 체크(true)
+      selected: existing ? existing.selected : true,
+      visibleCount: existing?.visibleCount || 3,
+      allResults: existing?.allResults || [],
+      candidates: existing?.candidates || []
     };
   });
 
@@ -36,7 +38,7 @@ $('searchAlbumBtn').onclick = async () => {
 
   const btn = $('searchAlbumBtn');
   btn.disabled = true;
-  btn.textContent = '수록곡 검색 중…';
+  btn.textContent = '곡 불러오는 중…';
 
   try {
     const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=album&country=KR&limit=5`);
@@ -61,12 +63,22 @@ $('searchAlbumBtn').onclick = async () => {
     $('headline').value = album.collectionName;
     
     applySongs();
-    alert(`[${album.collectionName}] 앨범에서 ${songItems.length}곡을 불러왔습니다.`);
+// 초기 실행 시 모든 곡 전체 체크 적용
+tracks.forEach((t, i) => { if (data[i]) data[i].selected = true; });
+renderTracks();
+renderEditors();
+renderOutput();
+    // 검색으로 새로 가져온 모든 수록곡 전체 선택(체크) 강제 적용
+    tracks.forEach((t, i) => { if (data[i]) data[i].selected = true; });
+    renderTracks();
+    renderEditors();
+    renderOutput();
+    alert(`[${album.collectionName}] 앨범에서 ${songItems.length}곡을 불러왔으며, 모든 곡이 추출 체크되었습니다.`);
   } catch (err) {
     alert('앨범 검색 실패: ' + err.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = '앨범 수록곡 자동 검색';
+    btn.textContent = '앨범 곡 불러오기';
   }
 };
 
@@ -78,7 +90,7 @@ function renderTracks() {
     d.className = 'track';
     d.innerHTML = `
       <span class="num" style="font-weight:750;font-size:14px">${String(i + 1).padStart(2, '0')}</span>
-      <div><div class="name"></div><small>앨범 수록곡 ${i + 1}번째</small></div>
+      <div><div class="name"></div></div>
       <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12px;font-weight:650;white-space:nowrap">
         <input type="checkbox" ${data[i].selected ? 'checked' : ''} aria-label="이 곡 추출 여부"> 추출
       </label>
@@ -202,16 +214,20 @@ function renderOutput() {
 
   const headlineText = $('headline').value || $('album').value || '앨범';
 
+  // 1장에 최대 8개씩 분할 (2열 4행), 8개 초과 시 다른 장으로 넘어가 헤드라인 반복
   const pageSize = 8;
-  for (let p = 0; p < Math.max(1, Math.ceil(selected.length / pageSize)); p++) {
+  const totalPages = Math.max(1, Math.ceil(selected.length / pageSize));
+
+  for (let p = 0; p < totalPages; p++) {
     const pageItems = selected.slice(p * pageSize, (p + 1) * pageSize);
 
     const pageDiv = document.createElement('div');
     pageDiv.className = 'preview-page';
 
+    // 매 장마다 헤드라인 반복
     const h2 = document.createElement('h2');
     h2.className = 'output-title';
-    h2.textContent = headlineText + (Math.ceil(selected.length / pageSize) > 1 ? ` (${p + 1})` : '');
+    h2.textContent = headlineText;
     pageDiv.appendChild(h2);
 
     const grid = document.createElement('div');
@@ -384,6 +400,16 @@ $('csvfile').onchange = async e => {
   const txt = await f.text();
   $('songs').value = txt.split(/\r?\n/).map(line => line.split(',')[0].replace(/^"|"$/g, '').trim()).filter(Boolean).join('\n');
   applySongs();
+// 초기 실행 시 모든 곡 전체 체크 적용
+tracks.forEach((t, i) => { if (data[i]) data[i].selected = true; });
+renderTracks();
+renderEditors();
+renderOutput();
 };
 
 applySongs();
+// 초기 실행 시 모든 곡 전체 체크 적용
+tracks.forEach((t, i) => { if (data[i]) data[i].selected = true; });
+renderTracks();
+renderEditors();
+renderOutput();

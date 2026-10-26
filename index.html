@@ -38,9 +38,9 @@ textarea{min-height:120px;resize:vertical}
 .track .num{color:var(--muted);font-size:12px}
 
 /* 유튜브 후보 카드 스타일 (썸네일 확대) */
-.candidates{display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:16px;margin-top:12px}
-.candidate{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff;display:flex;flex-direction:column}
-.candidate img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;background:#e5e7eb}
+.candidates{display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:16px;margin-top:14px}
+.candidate{border:1px solid var(--line);border-radius:14px;padding:14px;background:#fff;display:flex;flex-direction:column}
+.candidate img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;background:#e5e7eb;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
 .candidate h3{font-size:14px;line-height:1.4;margin:10px 0 6px;overflow-wrap:anywhere}
 .candidate .meta{font-size:12px;color:var(--muted);margin-bottom:10px}
 .candidate .pick{display:flex;gap:14px;margin-top:auto;padding-top:8px;border-top:1px solid var(--line);font-size:13px}
@@ -53,7 +53,7 @@ textarea{min-height:120px;resize:vertical}
 .thumbcard{min-width:0;text-align:center;break-inside:avoid}
 .thumbcard img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;display:block;background:#f0f0f0}
 .thumbcard .missing{aspect-ratio:16/9;border:1px dashed #c7c7c7;border-radius:10px;display:grid;place-items:center;color:var(--muted);font-size:12px}
-.thumbcard .caption{font-size:13px;font-weight:700;line-height:1.25;margin-top:3px;overflow-wrap:anywhere}
+.thumbcard .caption{font-size:13px;font-weight:700;line-height:1.15;margin-top:2px;overflow-wrap:anywhere}
 
 @media(max-width:650px){
   main{padding:14px 10px 32px}
@@ -67,7 +67,7 @@ textarea{min-height:120px;resize:vertical}
   .preview-page{border:0;padding:0;margin-bottom:0}
   .output-title{font-size:20pt;margin:0 0 10px}
   .thumbgrid{gap:8px 12px}
-  .thumbcard .caption{font-size:11pt;margin-top:2px}
+  .thumbcard .caption{font-size:13px;font-weight:700;line-height:1.15;margin-top:2px;overflow-wrap:anywhere}
 }
 </style>
 </head>
@@ -84,7 +84,7 @@ textarea{min-height:120px;resize:vertical}
       <label for="album">앨범명</label>
       <div style="display:flex;gap:6px">
         <input id="album" type="text" value="타요의 씽씽극장" placeholder="앨범명 입력">
-        <button class="btn primary" id="searchAlbumBtn" style="white-space:nowrap">앨범 수록곡 자동 검색</button>
+        <button class="btn primary" id="searchAlbumBtn" style="white-space:nowrap">앨범 곡 불러오기</button>
       </div>
     </div>
     <div>
