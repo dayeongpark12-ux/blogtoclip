@@ -1,4 +1,4 @@
-const CACHE = "album-thumbnail-pwa-v2";
+const CACHE = "album-thumbnail-pwa-v3";
 const CORE = ["./", "./index.html", "./app.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)));
