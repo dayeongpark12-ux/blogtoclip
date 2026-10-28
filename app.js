@@ -1,11 +1,19 @@
+// ============================================================
+// 1. YouTube Data API v3 키 고정 설정
+// 아래 FIXED_YOUTUBE_API_KEY 따옴표 안에 발급받으신 키를 넣어두시면
+// 어떤 기기에서든 키 입력창 없이 즉시 동작합니다.
+// ============================================================
+const FIXED_YOUTUBE_API_KEY = ""; 
+
 const $ = id => document.getElementById(id);
 let tracks = [], data = {};
 
+// 수록곡 분리
 function parseSongs() {
   return $('songs').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
 }
 
-// 곡 목록 적용 (추출 체크박스는 기본 무조건 true)
+// 곡 목록 적용 (기본: 모두 추출 체크)
 function applySongs() {
   const oldByName = {};
   tracks.forEach((t, i) => { oldByName[t.name] = data[i]; });
@@ -28,96 +36,7 @@ function applySongs() {
   renderOutput();
 }
 
-// 앨범 수록곡 자동 검색 (4단계 완화 검색 엔진)
-async function findAlbumTracks(query) {
-  try {
-    let res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=album&country=KR&limit=5`);
-    let d = await res.json();
-    if (d.results && d.results.length > 0) {
-      const colId = d.results[0].collectionId, colName = d.results[0].collectionName;
-      const lookup = await fetch(`https://itunes.apple.com/lookup?id=${colId}&entity=song&country=KR`);
-      const ld = await lookup.json();
-      const songs = (ld.results || []).filter(item => item.wrapperType === 'track');
-      if (songs.length > 0) return { albumName: colName, tracks: songs.map(s => s.trackName.trim()) };
-    }
-  } catch (e) {}
-
-  const simplified = query.replace(/의\s*/g, ' ').replace(/[\(\)\[\]\-_]/g, ' ').trim();
-  if (simplified && simplified !== query) {
-    try {
-      let res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(simplified)}&entity=album&country=KR&limit=5`);
-      let d = await res.json();
-      if (d.results && d.results.length > 0) {
-        const colId = d.results[0].collectionId, colName = d.results[0].collectionName;
-        const lookup = await fetch(`https://itunes.apple.com/lookup?id=${colId}&entity=song&country=KR`);
-        const ld = await lookup.json();
-        const songs = (ld.results || []).filter(item => item.wrapperType === 'track');
-        if (songs.length > 0) return { albumName: colName, tracks: songs.map(s => s.trackName.trim()) };
-      }
-    } catch (e) {}
-  }
-
-  try {
-    let res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&country=KR&limit=5`);
-    let d = await res.json();
-    if (d.results && d.results.length > 0 && d.results[0].collectionId) {
-      const lookup = await fetch(`https://itunes.apple.com/lookup?id=${d.results[0].collectionId}&entity=song&country=KR`);
-      const ld = await lookup.json();
-      const songs = (ld.results || []).filter(item => item.wrapperType === 'track');
-      if (songs.length > 0) return { albumName: d.results[0].collectionName, tracks: songs.map(s => s.trackName.trim()) };
-    }
-  } catch (e) {}
-
-  try {
-    let mbRes = await fetch(`https://musicbrainz.org/ws/2/release/?query=${encodeURIComponent(query)}&fmt=json&limit=3`);
-    let mbData = await mbRes.json();
-    if (mbData.releases && mbData.releases.length > 0) {
-      const relId = mbData.releases[0].id, relName = mbData.releases[0].title;
-      let dRes = await fetch(`https://musicbrainz.org/ws/2/release/${relId}?inc=recordings&fmt=json`);
-      let dData = await dRes.json();
-      const list = [];
-      (dData.media || []).forEach(m => {
-        (m.tracks || []).forEach(tr => { if (tr.title) list.push(tr.title.trim()); });
-      });
-      if (list.length > 0) return { albumName: relName, tracks: list };
-    }
-  } catch (e) {}
-
-  return null;
-}
-
-$('searchAlbumBtn').onclick = async () => {
-  const query = $('album').value.trim();
-  if (!query) { alert('앨범명을 입력해 주세요.'); $('album').focus(); return; }
-
-  const btn = $('searchAlbumBtn');
-  btn.disabled = true;
-  btn.textContent = '곡 불러오는 중…';
-
-  try {
-    const result = await findAlbumTracks(query);
-    if (!result || !result.tracks || result.tracks.length === 0) {
-      throw new Error(`'${query}' 앨범을 찾지 못했습니다.\n조사('의')를 빼거나 가수명을 함께 입력해 보세요.`);
-    }
-
-    $('songs').value = result.tracks.join('\n');
-    $('headline').value = result.albumName || query;
-    
-    applySongs();
-    tracks.forEach((t, i) => { if (data[i]) data[i].selected = true; });
-    renderTracks();
-    renderEditors();
-    renderOutput();
-    alert(`[${result.albumName || query}]에서 ${result.tracks.length}곡을 불러왔으며, 모두 선택되었습니다.`);
-  } catch (err) {
-    alert(err.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '앨범 곡 불러오기';
-  }
-};
-
-// 2. 수록곡 목록 렌더링 ('앨범 수록곡 00번째' 문구 없음)
+// 2. 수록곡 목록 렌더링
 function renderTracks() {
   const root = $('tracklist');
   root.innerHTML = '';
@@ -125,8 +44,8 @@ function renderTracks() {
     const d = document.createElement('div');
     d.className = 'track';
     d.innerHTML = `
-      <span class="num" style="font-weight:750;font-size:14px">${String(i + 1).padStart(2, '0')}</span>
-      <div><div class="name"></div></div>
+      <span class="num">${String(i + 1).padStart(2, '0')}</span>
+      <div class="name"></div>
       <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12px;font-weight:650;white-space:nowrap;cursor:pointer">
         <input type="checkbox" ${data[i].selected ? 'checked' : ''} aria-label="추출 여부"> 추출
       </label>
@@ -141,7 +60,7 @@ function renderTracks() {
   });
 }
 
-// 3. 곡별 유튜브 후보 지정 섹션 (썸네일 확대, URL 입력창 삭제, MP3 버튼)
+// 3. 곡별 유튜브 후보 지정 섹션
 function renderEditors() {
   const root = $('candidateEditor');
   root.innerHTML = '';
@@ -183,7 +102,7 @@ function renderEditors() {
         <div class="pick">
           <label><input type="radio" name="imagePick_${i}" data-k="imagePick" ${c.imagePick ? 'checked' : ''}> 이미지 선택</label>
           <label><input type="radio" name="audioPick_${i}" data-k="audioPick" ${c.audioPick ? 'checked' : ''}> 음원 선택</label>
-          ${c.url ? `<a href="https://www.y2mate.com/youtube/${c.id}" target="_blank" class="btn" style="padding:4px 8px;font-size:11px;text-decoration:none">MP3 다운</a>` : ''}
+          ${c.url ? `<a href="${c.url}" target="_blank" class="btn" style="padding:3px 8px;font-size:11px;text-decoration:none">영상 열기</a>` : ''}
         </div>
       `;
 
@@ -237,7 +156,7 @@ function syncCandidates(i) {
   });
 }
 
-// 4. 미리보기 렌더링 (A4 1장에 최대 2세트 수용, 헤드라인당 8개 2열 4행)
+// 4. 미리보기 렌더링: 사진과 100% 동일한 A4 가로 송북 양면(2화면) 배치
 function renderOutput() {
   const selected = tracks.filter((t, i) => data[i]?.selected);
   $('count').textContent = selected.length + '곡 선택';
@@ -245,40 +164,55 @@ function renderOutput() {
   const container = $('previewContainer');
   container.innerHTML = '';
 
-  const headlineText = $('headline').value || $('album').value || '앨범';
+  const headlineText = $('headline').value || $('album').value || '타요의 씽씽극장';
 
-  // 1세트당 최대 8개
-  const setSize = 8;
-  const totalSets = Math.ceil(selected.length / setSize) || 1;
+  // 1화면(페이지)당 8곡 (2열 4행)
+  // A4 1장에 2화면 = 총 16곡
+  const pageSize = 8;
+  const totalPages = Math.ceil(selected.length / pageSize) || 1;
+  const sheetsCount = Math.ceil(totalPages / 2);
 
-  // A4 한 장당 2세트씩 묶기
-  for (let pageIdx = 0; pageIdx < Math.ceil(totalSets / 2); pageIdx++) {
-    const pageDiv = document.createElement('div');
-    pageDiv.className = 'preview-page';
+  for (let s = 0; s < sheetsCount; s++) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'songbook-wrapper';
 
-    // 해당 페이지에 들어갈 2개 세트 생성 (Set 1, Set 2)
-    for (let s = 0; s < 2; s++) {
-      const currentSetIdx = pageIdx * 2 + s;
-      if (currentSetIdx >= totalSets && pageIdx > 0) break;
+    const sheet = document.createElement('div');
+    sheet.className = 'songbook-sheet';
 
-      const setDiv = document.createElement('div');
-      setDiv.className = 'preview-set';
+    // 좌측 화면 (페이지 1) & 우측 화면 (페이지 2)
+    for (let p = 0; p < 2; p++) {
+      const pageIndex = s * 2 + p;
+      const pageItems = selected.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
 
-      const h2 = document.createElement('h2');
-      h2.className = 'output-title';
-      h2.textContent = headlineText + (totalSets > 1 ? ` (${currentSetIdx + 1})` : '');
-      setDiv.appendChild(h2);
+      const pageDiv = document.createElement('div');
+      pageDiv.className = 'songbook-page';
 
-      const grid = document.createElement('div');
-      grid.className = 'thumbgrid';
+      // 상단 헤더 (타요 버스 아이콘 + 빨간색 굵은 헤드라인)
+      const headerDiv = document.createElement('div');
+      headerDiv.className = 'page-header';
+      headerDiv.innerHTML = `
+        <svg class="bus-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4" y="8" width="32" height="24" rx="6" fill="#0284c7"/>
+          <rect x="8" y="12" width="24" height="10" rx="3" fill="#e0f2fe"/>
+          <circle cx="12" cy="17" r="2.5" fill="#0f172a"/>
+          <circle cx="28" cy="17" r="2.5" fill="#0f172a"/>
+          <circle cx="11" cy="31" r="3.5" fill="#334155"/>
+          <circle cx="29" cy="31" r="3.5" fill="#334155"/>
+          <rect x="14" y="24" width="12" height="4" rx="2" fill="#fff"/>
+        </svg>
+        <h2>${escapeAttr(headlineText)}</h2>
+      `;
+      pageDiv.appendChild(headerDiv);
 
-      const setItems = selected.slice(currentSetIdx * setSize, (currentSetIdx + 1) * setSize);
+      // 2열 4행 그리드
+      const gridDiv = document.createElement('div');
+      gridDiv.className = 'page-grid';
 
-      setItems.forEach(t => {
+      pageItems.forEach(t => {
         const i = t.order;
         const c = data[i].candidates.find(x => x.imagePick) || data[i].candidates[0];
         const card = document.createElement('div');
-        card.className = 'thumbcard';
+        card.className = 'song-card';
 
         if (c && c.image) {
           const img = document.createElement('img');
@@ -293,25 +227,30 @@ function renderOutput() {
         }
 
         const cap = document.createElement('div');
-        cap.className = 'caption';
+        cap.className = 'song-title';
         cap.textContent = t.name;
         card.appendChild(cap);
 
-        grid.appendChild(card);
+        gridDiv.appendChild(card);
       });
 
-      setDiv.appendChild(grid);
-      pageDiv.appendChild(setDiv);
+      pageDiv.appendChild(gridDiv);
+      sheet.appendChild(pageDiv);
     }
 
-    container.appendChild(pageDiv);
+    wrapper.appendChild(sheet);
+    container.appendChild(wrapper);
   }
 }
 
 // 유튜브 Data API v3 검색
 async function searchYouTube(i, button) {
-  const key = $('ytkey').value.trim();
-  if (!key) { alert('YouTube Data API v3 키를 입력해 주세요.'); $('ytkey').focus(); return; }
+  const key = getApiKey();
+  if (!key) {
+    alert('YouTube Data API v3 키를 입력해 주세요.\n한 번 입력하시면 다음부터는 자동 고정됩니다.');
+    $('ytkey').focus();
+    return;
+  }
 
   const track = tracks[i];
   const query = ($('album').value.trim() + ' ' + track.name).trim();
@@ -359,9 +298,19 @@ async function searchYouTube(i, button) {
   }
 }
 
-// 5. 미리보기 HTML 저장 (이미지 깨짐 방지 no-referrer 적용)
+// API 키 고정 및 불러오기 함수
+function getApiKey() {
+  if (FIXED_YOUTUBE_API_KEY && FIXED_YOUTUBE_API_KEY.trim()) {
+    return FIXED_YOUTUBE_API_KEY.trim();
+  }
+  const inputVal = $('ytkey')?.value.trim();
+  if (inputVal) return inputVal;
+  return localStorage.getItem('albumToolYouTubeKey') || '';
+}
+
+// 미리보기 HTML 저장 (no-referrer 메타로 이미지 영구 보호)
 $('savePreviewHtml').onclick = () => {
-  const title = $('headline').value || $('album').value || '앨범';
+  const title = $('headline').value || $('album').value || '타요의 씽씽극장';
   const previewHtml = $('previewContainer').innerHTML;
 
   const doc = `<!doctype html>
@@ -370,23 +319,26 @@ $('savePreviewHtml').onclick = () => {
 <meta charset="utf-8">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeAttr(title)}</title>
+<title>${escapeAttr(title)} - 송북</title>
 <style>
-body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;margin:20px;background:#f8f9fa;color:#202124}
-.preview-page{background:white;padding:24px;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,0.06);margin-bottom:28px;display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:24px;page-break-after:always}
-.preview-set{border:1px solid #eee;border-radius:10px;padding:14px;background:#fff}
-.output-title{text-align:center;font-size:22px;font-weight:800;letter-spacing:-.03em;margin:0 0 20px 0;padding-bottom:8px;border-bottom:2px solid #e5e7eb}
-.thumbgrid{display:grid;grid-template-columns:repeat(2, 1fr);gap:8px 12px}
-.thumbcard{text-align:center}
-.thumbcard img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;display:block}
-.caption{font-size:12px;font-weight:700;line-height:1.2;margin-top:2px}
+body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;margin:16px;background:#f8fafc;color:#1e293b}
+.songbook-wrapper{background:#fff;border:2px solid #334155;border-radius:6px;padding:16px;margin-bottom:24px;page-break-after:always}
+.songbook-sheet{display:grid;grid-template-columns:1fr 1fr;position:relative;gap:16px}
+.songbook-sheet::before{content:'';position:absolute;left:50%;top:0;bottom:0;width:1px;border-left:1.5px dashed #94a3b8;transform:translateX(-50%)}
+.songbook-page{border:1.5px dashed #94a3b8;border-radius:12px;padding:12px;background:#fff;display:flex;flex-direction:column}
+.page-header{display:flex;align-items:center;gap:8px;padding-bottom:8px;margin-bottom:12px;border-bottom:1.5px dashed #cbd5e1}
+.page-header .bus-icon{width:32px;height:32px;border-radius:6px}
+.page-header h2{margin:0;font-size:22px;font-weight:900;color:#ef4444}
+.page-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4, minmax(0, 1fr));gap:10px 8px}
+.song-card{border:1px dashed #cbd5e1;border-radius:8px;padding:4px;display:flex;flex-direction:column;align-items:center;text-align:center}
+.song-card img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:6px;display:block}
+.song-card .song-title{font-size:11px;font-weight:700;line-height:1.2;margin-top:3px;color:#1e293b}
 @media print{
-  @page{size:A4 landscape;margin:6mm}
+  @page{size:A4 landscape;margin:5mm}
   body{margin:0;background:white}
-  .preview-page{box-shadow:none;padding:0;margin:0 0 10mm 0;border:0}
-  .preview-set{border:0;padding:0}
-  .output-title{font-size:16pt;margin:0 0 14px 0}
-  .caption{font-size:10pt}
+  .songbook-wrapper{border:2px solid #000!important;padding:5mm!important;margin:0 0 10mm 0!important}
+  .page-header h2{color:#ef4444!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .song-card img{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 </style>
 </head>
@@ -395,40 +347,18 @@ ${previewHtml}
 </body>
 </html>`;
 
-  download(doc, `${slug(title)}_미리보기.html`, 'text/html;charset=utf-8');
+  download(doc, `${slug(title)}_송북_A4가로.html`, 'text/html;charset=utf-8');
 };
 
-// 6. 입력값(앨범명, 후보 등)을 포함한 전체 HTML 백업 저장
+// 작업 백업 HTML 저장
 $('saveBackupHtml').onclick = () => {
-  const title = $('headline').value || $('album').value || '앨범';
-  const stateData = {
-    album: $('album').value,
-    headline: $('headline').value,
-    songs: $('songs').value,
-    tracks,
-    data
-  };
-
-  const backupDoc = `<!doctype html>
-<html lang="ko">
-<head>
-<meta charset="utf-8">
-<meta name="referrer" content="no-referrer">
-<title>${escapeAttr(title)} - 작업 백업</title>
-</head>
-<body>
-<h1>${escapeAttr(title)} 작업 상태 백업 파일</h1>
-<p>이 파일은 작업 상태를 보존한 HTML 백업본입니다.</p>
-<pre id="backupData" style="background:#eee;padding:16px;border-radius:8px;overflow:auto">${escapeAttr(JSON.stringify(stateData, null, 2))}</pre>
-<h2>미리보기</h2>
-${$('previewContainer').innerHTML}
-</body>
-</html>`;
-
+  const title = $('headline').value || $('album').value || '타요의 씽씽극장';
+  const stateData = { album: $('album').value, headline: $('headline').value, songs: $('songs').value, tracks, data };
+  const backupDoc = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${escapeAttr(title)} - 백업</title></head><body><h1>${escapeAttr(title)} 작업 상태 백업</h1><pre>${escapeAttr(JSON.stringify(stateData, null, 2))}</pre></body></html>`;
   download(backupDoc, `${slug(title)}_작업백업.html`, 'text/html;charset=utf-8');
 };
 
-// 7. 선택 음원 MP3 다운로드 모달 및 스크립트 생성
+// 음원 모달 창
 $('downloadMp3Btn').onclick = () => {
   const modal = $('mp3Modal');
   const list = $('mp3List');
@@ -447,10 +377,10 @@ $('downloadMp3Btn').onclick = () => {
     row.innerHTML = `
       <div>
         <strong style="font-size:13px">${escapeAttr(t.name)}</strong>
-        <div style="font-size:11px;color:var(--muted)">${escapeAttr(c?.title || '후보 영상 미선택')}</div>
+        <div style="font-size:11px;color:var(--muted)">${escapeAttr(c?.title || '후보 미선택')}</div>
       </div>
       <div>
-        ${c?.id ? `<a href="https://www.y2mate.com/youtube/${c.id}" target="_blank" class="btn primary" style="font-size:12px;text-decoration:none;padding:6px 10px">MP3 변환/저장</a>` : '<span style="font-size:11px;color:var(--muted)">URL 없음</span>'}
+        ${c?.url ? `<a href="${c.url}" target="_blank" class="btn primary" style="font-size:11px;text-decoration:none;padding:5px 9px">영상/음원 열기</a>` : '<span style="font-size:11px;color:var(--muted)">URL 없음</span>'}
       </div>
     `;
     list.appendChild(row);
@@ -459,9 +389,20 @@ $('downloadMp3Btn').onclick = () => {
   modal.style.display = 'flex';
 };
 
-// yt-dlp 일괄 다운로드 배치파일(.bat) 다운로드
+// URL 텍스트 다운로드
+$('downloadUrlTxt').onclick = () => {
+  const lines = [];
+  tracks.forEach(t => {
+    if (!data[t.order]?.selected) return;
+    const c = (data[t.order].candidates || []).find(x => x.audioPick) || (data[t.order].candidates || [])[0];
+    if (c?.url) lines.push(`${t.name}: ${c.url}`);
+  });
+  download(lines.join('\r\n'), `${slug($('album').value)}_음원링크.txt`, 'text/plain;charset=utf-8');
+};
+
+// PC 일괄 다운로드 배치파일(.bat)
 $('downloadBatScript').onclick = () => {
-  const albumName = $('album').value.trim() || '앨범';
+  const albumName = $('album').value.trim() || '타요의 씽씽극장';
   const urls = [];
   tracks.forEach(t => {
     if (!data[t.order]?.selected) return;
@@ -469,9 +410,9 @@ $('downloadBatScript').onclick = () => {
     if (c?.url) urls.push(`yt-dlp -x --audio-format mp3 -o "${albumName}/%(title)s.%(ext)s" "${c.url}"`);
   });
 
-  if (!urls.length) { alert('다운로드할 음원 URL이 없습니다.'); return; }
-  const batContent = `@echo off\r\nchcp 65001 > nul\r\necho [${albumName}] MP3 다운로드를 시작합니다...\r\n` + urls.join('\r\n') + '\r\npause';
-  download(batContent, `${slug(albumName)}_MP3_일괄다운로드.bat`, 'text/plain;charset=utf-8');
+  if (!urls.length) { alert('다운로드할 음원 후보가 없습니다.'); return; }
+  const batContent = `@echo off\r\nchcp 65001 > nul\r\necho [${albumName}] MP3 일괄 다운로드를 진행합니다...\r\n` + urls.join('\r\n') + '\r\npause';
+  download(batContent, `${slug(albumName)}_일괄다운로드.bat`, 'text/plain;charset=utf-8');
 };
 
 // 인쇄 / PDF 저장
@@ -481,14 +422,12 @@ $('print').onclick = () => window.print();
 $('savecsv').onclick = () => {
   const albumName = $('album').value.trim() || '앨범';
   const rows = [['앨범이름', '곡이름', '유튜브 타이틀', '유튜브 url', '재생시간']];
-
   tracks.forEach((t, i) => {
     if (!data[i].selected) return;
     const cs = data[i].candidates || [];
     const target = cs.find(c => c.audioPick) || cs.find(c => c.imagePick) || cs[0] || {};
     rows.push([albumName, t.name, target.title || '', target.url || '', target.duration || '']);
   });
-
   const csvContent = '\ufeff' + rows.map(r => r.map(v => '"' + String(v).replaceAll('"', '""') + '"').join(',')).join('\r\n');
   download(csvContent, `${slug(albumName)}_음원목록.csv`, 'text/csv;charset=utf-8');
 };
@@ -514,14 +453,15 @@ function download(content, name, type) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+// API 키 로컬 보존
 try {
   const savedKey = localStorage.getItem('albumToolYouTubeKey');
-  if (savedKey) { $('ytkey').value = savedKey; $('rememberKey').checked = true; }
+  if (savedKey) $('ytkey').value = savedKey;
 } catch (e) {}
-$('rememberKey').onchange = $('ytkey').onchange = () => {
+$('ytkey').onchange = () => {
   try {
-    if ($('rememberKey').checked && $('ytkey').value.trim()) localStorage.setItem('albumToolYouTubeKey', $('ytkey').value.trim());
-    else if (!$('rememberKey').checked) localStorage.removeItem('albumToolYouTubeKey');
+    const val = $('ytkey').value.trim();
+    if (val) localStorage.setItem('albumToolYouTubeKey', val);
   } catch (e) {}
 };
 
@@ -542,6 +482,7 @@ $('csvfile').onchange = async e => {
   renderOutput();
 };
 
+// 시작 시 즉시 15곡 적용
 applySongs();
 tracks.forEach((t, i) => { if (data[i]) data[i].selected = true; });
 renderTracks();
