@@ -3,26 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#f7f1e8">
+<meta name="theme-color" content="#f8fafc">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <title>타요의 씽씽극장 썸네일 송북 도구</title>
 <style>
-:root{--ink:#202124;--muted:#64748b;--line:#e2e8f0;--primary:#3b82f6;--tayo-blue:#0284c7;--tayo-red:#ef4444;--bg:#f8fafc}
+:root{--ink:#1e293b;--muted:#64748b;--line:#e2e8f0;--primary:#0f172a;--tayo-blue:#0284c7;--tayo-red:#ef4444;--bg:#f8fafc}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
-main{max-width:1200px;margin:0 auto;padding:20px 16px 48px}
-.panel{background:white;border:1px solid var(--line);border-radius:14px;padding:18px;margin:14px 0}
-h1{font-size:26px;text-align:center;margin:6px 0 4px;font-weight:800;letter-spacing:-.03em}
-.sub{text-align:center;color:var(--muted);font-size:13px;margin:0 0 18px}
-h2{font-size:17px;margin:0 0 12px}
+main{max-width:1100px;margin:0 auto;padding:16px 14px 48px}
+.panel{background:white;border:1px solid var(--line);border-radius:14px;padding:16px;margin:12px 0}
+h1{font-size:24px;text-align:center;margin:6px 0 4px;font-weight:800;letter-spacing:-.03em}
+.sub{text-align:center;color:var(--muted);font-size:12px;margin:0 0 16px}
+h2{font-size:16px;margin:0 0 10px}
 label{display:block;font-size:13px;font-weight:650;margin-bottom:6px}
 input,textarea,select,button{font:inherit}
 input[type=text],input[type=url],input[type=password],textarea,select{width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:9px 11px;background:#fff;color:var(--ink)}
-textarea{min-height:140px;resize:vertical;font-size:13px;line-height:1.5}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+textarea{min-height:130px;resize:vertical;font-size:13px;line-height:1.5}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.btn{border:1px solid #cbd5e1;background:white;border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:650;transition:all 0.15s;font-size:13px}
+.btn{border:1px solid #cbd5e1;background:white;border-radius:8px;padding:8px 13px;cursor:pointer;font-weight:650;transition:all 0.15s;font-size:13px}
 .btn:hover{background:#f1f5f9}
 .btn.primary{background:#0f172a;color:white;border-color:#0f172a}
 .btn.primary:hover{background:#334155}
@@ -39,32 +39,35 @@ textarea{min-height:140px;resize:vertical;font-size:13px;line-height:1.5}
 .track .num{color:var(--muted);font-size:12px;font-weight:700}
 
 /* 유튜브 후보 카드 스타일 */
-.candidates{display:grid;grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));gap:14px;margin-top:12px}
+.candidates{display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;margin-top:12px}
 .candidate{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff;display:flex;flex-direction:column}
 .candidate img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;background:#e2e8f0}
 .candidate h3{font-size:13px;line-height:1.4;margin:8px 0 4px;overflow-wrap:anywhere}
 .candidate .meta{font-size:11px;color:var(--muted);margin-bottom:8px}
-.candidate .pick{display:flex;gap:10px;margin-top:auto;padding-top:8px;border-top:1px solid var(--line);font-size:12px;align-items:center;justify-content:space-between}
+.candidate .pick{display:flex;gap:8px;margin-top:auto;padding-top:8px;border-top:1px solid var(--line);font-size:12px;align-items:center;justify-content:space-between}
 .candidate .pick label{display:inline-flex;align-items:center;gap:4px;cursor:pointer;margin:0}
 
 /* ========================================================== */
-/* 송북 미리보기 스타일 (A4 가로 2화면 분할 완벽 구현)           */
+/* 송북 미리보기: 모바일 A5 크기 & PC/인쇄 A4 가로 2화면 분할  */
 /* ========================================================== */
 .songbook-wrapper{
   background:#fff;
   border:2px solid #334155;
-  border-radius:6px;
-  padding:16px;
-  margin:16px 0 24px;
+  border-radius:8px;
+  padding:14px;
+  margin:16px auto 24px;
   page-break-after:always;
+  max-width:100%;
 }
+
+/* PC 데스크톱 기본: 좌우 2개 A5 페이지 나란히 (A4 가로 책자) */
 .songbook-sheet{
   display:grid;
   grid-template-columns:1fr 1fr;
   position:relative;
   gap:16px;
 }
-/* 가운데 세로 접는 점선 */
+/* 가운데 접는 점선 */
 .songbook-sheet::before{
   content:'';
   position:absolute;
@@ -76,7 +79,8 @@ textarea{min-height:140px;resize:vertical;font-size:13px;line-height:1.5}
   transform:translateX(-50%);
   pointer-events:none;
 }
-/* 좌/우 각 페이지 */
+
+/* A5 사이즈 페이지 카드 (가로 148 : 세로 210mm 비율 = 1:1.414) */
 .songbook-page{
   border:1.5px dashed #94a3b8;
   border-radius:12px;
@@ -84,25 +88,27 @@ textarea{min-height:140px;resize:vertical;font-size:13px;line-height:1.5}
   background:#fff;
   display:flex;
   flex-direction:column;
+  width:100%;
+  box-sizing:border-box;
 }
+
 /* 상단 헤더: 아이콘 + 타요의 씽씽극장 로고 타이틀 */
 .page-header{
   display:flex;
   align-items:center;
   gap:8px;
   padding-bottom:8px;
-  margin-bottom:12px;
+  margin-bottom:10px;
   border-bottom:1.5px dashed #cbd5e1;
 }
 .page-header .bus-icon{
-  width:32px;
-  height:32px;
-  border-radius:6px;
-  object-fit:contain;
+  width:30px;
+  height:30px;
+  flex-shrink:0;
 }
 .page-header h2{
   margin:0;
-  font-size:22px;
+  font-size:20px;
   font-weight:900;
   color:#ef4444;
   letter-spacing:-0.03em;
@@ -113,7 +119,7 @@ textarea{min-height:140px;resize:vertical;font-size:13px;line-height:1.5}
   display:grid;
   grid-template-columns:1fr 1fr;
   grid-template-rows:repeat(4, minmax(0, 1fr));
-  gap:10px 8px;
+  gap:8px 6px;
   flex:1;
 }
 /* 각 카드: 점선 박스 + 둥근 썸네일 + 노래제목 */
@@ -127,6 +133,7 @@ textarea{min-height:140px;resize:vertical;font-size:13px;line-height:1.5}
   justify-content:flex-start;
   text-align:center;
   background:#fff;
+  min-height:0;
 }
 .song-card img{
   width:100%;
@@ -156,20 +163,51 @@ textarea{min-height:140px;resize:vertical;font-size:13px;line-height:1.5}
   word-break:keep-all;
 }
 
-/* MP3 모달 */
-.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;z-index:9999}
-.modal-box{background:white;border-radius:14px;max-width:540px;width:92%;max-height:85vh;overflow-y:auto;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,0.2)}
-.mp3-item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);gap:10px}
+/* ========================================================== */
+/* 모바일 반응형: 화면이 좁을 때 한 장당 A5 단독 세로 규격으로 큼직하게 표시 */
+/* ========================================================== */
+@media (max-width: 768px) {
+  .grid { grid-template-columns: 1fr; }
+  .songbook-wrapper {
+    padding: 8px;
+    border: none;
+    background: transparent;
+  }
+  .songbook-sheet {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .songbook-sheet::before {
+    display: none; /* 모바일에서는 세로 분할 점선 숨김 */
+  }
+  .songbook-page {
+    max-width: 440px; /* 스마트폰에서 편안하게 한눈에 들어오는 A5 비율 폭 */
+    margin: 0 auto;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+    padding: 14px;
+  }
+  .page-header h2 { font-size: 20px; }
+  .page-grid { gap: 10px 8px; }
+  .song-card .song-title { font-size: 11px; }
+}
 
-/* A4 가로 인쇄 최적화 (사진과 100% 일치하도록 순수 콘텐츠만 출력) */
+/* MP3 모달 */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:none;align-items:center;justify-content:center;z-index:9999;padding:12px}
+.modal-box{background:white;border-radius:14px;max-width:540px;width:100%;max-height:85vh;overflow-y:auto;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,0.25)}
+.mp3-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);gap:10px}
+.mp3-btn-group{display:flex;gap:6px;flex-shrink:0}
+
+/* A4 가로 인쇄 최적화 (사진과 100% 동일하게 순수 송북만 2화면 인쇄) */
 @media print{
   @page{size:A4 landscape;margin:5mm}
   html,body{background:white!important;margin:0!important;padding:0!important}
   main{max-width:none!important;margin:0!important;padding:0!important}
   .no-print{display:none!important}
   #previewPanel{border:0!important;padding:0!important;margin:0!important;background:transparent!important}
-  .songbook-wrapper{border:2px solid #000!important;padding:6mm!important;margin:0 0 10mm 0!important;box-shadow:none!important}
-  .songbook-sheet{gap:6mm!important}
+  .songbook-wrapper{border:2px solid #000!important;padding:5mm!important;margin:0 0 10mm 0!important;box-shadow:none!important}
+  .songbook-sheet{display:grid!important;grid-template-columns:1fr 1fr!important;gap:6mm!important}
+  .songbook-sheet::before{display:block!important;border-left:1.5px dashed #94a3b8!important}
+  .songbook-page{max-width:none!important;margin:0!important;box-shadow:none!important}
   .page-header h2{color:#ef4444!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .song-card img{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
@@ -178,7 +216,7 @@ textarea{min-height:140px;resize:vertical;font-size:13px;line-height:1.5}
 <body><main>
 <header class="no-print">
   <h1>타요의 씽씽극장 썸네일 송북 도구</h1>
-  <p class="sub">A4 가로 2화면 송북 배치 · 유튜브 API 키 고정 · 간편 음원 저장</p>
+  <p class="sub">모바일 A5 맞춤 뷰 · A4 가로 2화면 인쇄 · 실시간 MP3 음원 다운로드</p>
 </header>
 
 <section class="panel no-print">
@@ -194,7 +232,7 @@ textarea{min-height:140px;resize:vertical;font-size:13px;line-height:1.5}
     </div>
   </div>
 
-  <div style="margin-top:14px">
+  <div style="margin-top:12px">
     <label for="songs">수록곡 목록 (세 번째 필드: 한 줄에 한 곡)</label>
     <textarea id="songs">오프닝
 꼬마버스가 출발합니다
@@ -211,7 +249,7 @@ textarea{min-height:140px;resize:vertical;font-size:13px;line-height:1.5}
 환상의 우주 여행
 아침이 밝았어요
 엔딩</textarea>
-    <p class="hint">타요의 씽씽극장 15곡이 기본 탑재되어 있습니다. 다른 곡을 입력하시려면 한 줄에 한 곡씩 넣어주세요.</p>
+    <p class="hint">타요의 씽씽극장 15곡이 기본 세팅되어 있습니다. 다른 곡을 입력하시려면 한 줄에 한 곡씩 넣어주세요.</p>
   </div>
   <div class="row" style="margin-top:10px">
     <button class="btn primary" id="apply">곡 목록 적용</button>
@@ -230,44 +268,44 @@ textarea{min-height:140px;resize:vertical;font-size:13px;line-height:1.5}
 <section class="panel no-print">
   <h2>3. 곡별 유튜브 후보 지정</h2>
   <div style="margin-bottom:14px">
-    <label for="ytkey">YouTube Data API v3 키 (자동 고정 보존)</label>
-    <input id="ytkey" type="password" autocomplete="off" placeholder="여기에 YouTube API 키를 1회 입력하시면 영구 고정됩니다">
-    <p class="hint">한 번 입력하시면 브라우저 및 코드에 영구 고정되어 다음부터는 다시 입력하실 필요가 없습니다.</p>
+    <label for="ytkey">YouTube Data API v3 키 (영구 고정 보관)</label>
+    <input id="ytkey" type="password" autocomplete="off" placeholder="YouTube API 키 입력 (1회 입력 시 영구 고정됩니다)">
+    <p class="hint">키를 입력해두시면 브라우저에 저장되어 재접속 시에도 계속 유지됩니다.</p>
   </div>
   <div id="candidateEditor"></div>
 </section>
 
 <section class="panel" id="previewPanel">
   <div class="row no-print" style="justify-content:space-between;margin-bottom:12px">
-    <h2 style="margin:0">미리보기 (A4 가로 2화면 배치: 한 화면당 최대 8곡)</h2>
+    <h2 style="margin:0">미리보기 (모바일: A5 단독 세로뷰 / 인쇄: A4 가로 2화면)</h2>
     <span id="count" style="font-size:12px;font-weight:700;color:var(--tayo-blue);background:#e0f2fe;padding:4px 8px;border-radius:6px">0곡 선택</span>
   </div>
   
-  <!-- A4 가로 송북 양면 출력 컨테이너 -->
+  <!-- 송북 렌더링 컨테이너 -->
   <div id="previewContainer"></div>
 
   <div class="row no-print" style="margin-top:20px;gap:8px">
+    <button class="btn accent" id="downloadMp3Btn">🎵 선택 음원 MP3 다운로드</button>
     <button class="btn primary" id="savePreviewHtml">미리보기 HTML 저장 (이미지 보호)</button>
     <button class="btn" id="saveBackupHtml">작업 데이터 백업 저장</button>
-    <button class="btn accent" id="downloadMp3Btn">선택 음원 듣기 / 저장 안내</button>
     <button class="btn" id="savecsv">CSV 저장</button>
     <button class="btn primary" id="print">A4 가로 인쇄 / PDF 저장</button>
   </div>
 </section>
 </main>
 
-<!-- 음원 저장 / 바로가기 모달 -->
+<!-- MP3 다운로드 모달 (동작하는 진짜 MP3 다운로더 연동) -->
 <div class="modal-overlay" id="mp3Modal">
   <div class="modal-box">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <h3 style="margin:0;font-size:17px">선택 음원 바로가기 및 다운로드</h3>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <h3 style="margin:0;font-size:17px">🎵 MP3 음원 파일 다운로드</h3>
       <button class="btn" onclick="$('mp3Modal').style.display='none'">닫기</button>
     </div>
-    <p class="hint" style="margin-top:0">Safari 브라우저 보안 규정상 유효한 재생 링크를 직접 연결해 드립니다. PC에서는 배치파일로 일괄 저장하실 수 있습니다.</p>
+    <p class="hint" style="margin-top:0">영상 페이지 대신 <strong>실제 MP3 파일 다운로드 페이지</strong>로 바로 연결됩니다. 원하시는 곡의 버튼을 누르시면 즉시 MP3로 저장하실 수 있습니다.</p>
     <div id="mp3List" style="margin:12px 0"></div>
     <div class="row" style="justify-content:space-between;margin-top:14px">
       <button class="btn" id="downloadUrlTxt">URL 목록 텍스트 받기</button>
-      <button class="btn primary" id="downloadBatScript">PC 일괄 다운로드 파일(.bat) 받기</button>
+      <button class="btn primary" id="downloadBatScript">PC 일괄 다운로드 스크립트(.bat) 받기</button>
     </div>
   </div>
 </div>

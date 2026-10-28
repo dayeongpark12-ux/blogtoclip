@@ -1,7 +1,6 @@
 // ============================================================
 // 1. YouTube Data API v3 키 고정 설정
-// 아래 FIXED_YOUTUBE_API_KEY 따옴표 안에 발급받으신 키를 넣어두시면
-// 어떤 기기에서든 키 입력창 없이 즉시 동작합니다.
+// 발급받으신 키를 아래 따옴표 안에 적어두시면 어떤 환경에서도 자동 적용됩니다.
 // ============================================================
 const FIXED_YOUTUBE_API_KEY = ""; 
 
@@ -95,6 +94,10 @@ function renderEditors() {
     visibleList.forEach((c, j) => {
       const card = document.createElement('div');
       card.className = 'candidate';
+      
+      // 영상 페이지가 아니라 실제 MP3 추출기로 바로 연결되는 링크 생성
+      const mp3DownloadUrl = c.url ? `https://dirpy.com/studio?url=${encodeURIComponent(c.url)}` : '';
+
       card.innerHTML = `
         <img alt="후보 썸네일" src="${escapeAttr(c.image || '')}">
         <h3>${escapeAttr(c.title || '제목 없음')}</h3>
@@ -102,7 +105,7 @@ function renderEditors() {
         <div class="pick">
           <label><input type="radio" name="imagePick_${i}" data-k="imagePick" ${c.imagePick ? 'checked' : ''}> 이미지 선택</label>
           <label><input type="radio" name="audioPick_${i}" data-k="audioPick" ${c.audioPick ? 'checked' : ''}> 음원 선택</label>
-          ${c.url ? `<a href="${c.url}" target="_blank" class="btn" style="padding:3px 8px;font-size:11px;text-decoration:none">영상 열기</a>` : ''}
+          ${mp3DownloadUrl ? `<a href="${mp3DownloadUrl}" target="_blank" class="btn accent" style="padding:3px 8px;font-size:11px;text-decoration:none">MP3 다운</a>` : ''}
         </div>
       `;
 
@@ -156,7 +159,7 @@ function syncCandidates(i) {
   });
 }
 
-// 4. 미리보기 렌더링: 사진과 100% 동일한 A4 가로 송북 양면(2화면) 배치
+// 4. 미리보기 렌더링: 모바일 A5 단독 세로뷰 & 인쇄 A4 가로 2화면 분할 완벽 대응
 function renderOutput() {
   const selected = tracks.filter((t, i) => data[i]?.selected);
   $('count').textContent = selected.length + '곡 선택';
@@ -166,8 +169,8 @@ function renderOutput() {
 
   const headlineText = $('headline').value || $('album').value || '타요의 씽씽극장';
 
-  // 1화면(페이지)당 8곡 (2열 4행)
-  // A4 1장에 2화면 = 총 16곡
+  // 1개 페이지(A5 크기)당 최대 8곡 (2열 4행)
+  // 1장에 2페이지 = 최대 16곡
   const pageSize = 8;
   const totalPages = Math.ceil(selected.length / pageSize) || 1;
   const sheetsCount = Math.ceil(totalPages / 2);
@@ -179,15 +182,17 @@ function renderOutput() {
     const sheet = document.createElement('div');
     sheet.className = 'songbook-sheet';
 
-    // 좌측 화면 (페이지 1) & 우측 화면 (페이지 2)
+    // 좌측 화면(페이지 1, A5) & 우측 화면(페이지 2, A5)
     for (let p = 0; p < 2; p++) {
       const pageIndex = s * 2 + p;
+      if (pageIndex >= totalPages && s > 0) break;
+
       const pageItems = selected.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
 
       const pageDiv = document.createElement('div');
       pageDiv.className = 'songbook-page';
 
-      // 상단 헤더 (타요 버스 아이콘 + 빨간색 굵은 헤드라인)
+      // 상단 헤더: 타요 버스 아이콘 + 볼드체 빨간색 로고 타이틀
       const headerDiv = document.createElement('div');
       headerDiv.className = 'page-header';
       headerDiv.innerHTML = `
@@ -322,21 +327,29 @@ $('savePreviewHtml').onclick = () => {
 <title>${escapeAttr(title)} - 송북</title>
 <style>
 body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;margin:16px;background:#f8fafc;color:#1e293b}
-.songbook-wrapper{background:#fff;border:2px solid #334155;border-radius:6px;padding:16px;margin-bottom:24px;page-break-after:always}
+.songbook-wrapper{background:#fff;border:2px solid #334155;border-radius:8px;padding:14px;margin-bottom:24px;page-break-after:always}
 .songbook-sheet{display:grid;grid-template-columns:1fr 1fr;position:relative;gap:16px}
 .songbook-sheet::before{content:'';position:absolute;left:50%;top:0;bottom:0;width:1px;border-left:1.5px dashed #94a3b8;transform:translateX(-50%)}
 .songbook-page{border:1.5px dashed #94a3b8;border-radius:12px;padding:12px;background:#fff;display:flex;flex-direction:column}
-.page-header{display:flex;align-items:center;gap:8px;padding-bottom:8px;margin-bottom:12px;border-bottom:1.5px dashed #cbd5e1}
-.page-header .bus-icon{width:32px;height:32px;border-radius:6px}
-.page-header h2{margin:0;font-size:22px;font-weight:900;color:#ef4444}
-.page-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4, minmax(0, 1fr));gap:10px 8px}
+.page-header{display:flex;align-items:center;gap:8px;padding-bottom:8px;margin-bottom:10px;border-bottom:1.5px dashed #cbd5e1}
+.page-header .bus-icon{width:30px;height:30px}
+.page-header h2{margin:0;font-size:20px;font-weight:900;color:#ef4444}
+.page-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4, minmax(0, 1fr));gap:8px 6px}
 .song-card{border:1px dashed #cbd5e1;border-radius:8px;padding:4px;display:flex;flex-direction:column;align-items:center;text-align:center}
 .song-card img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:6px;display:block}
 .song-card .song-title{font-size:11px;font-weight:700;line-height:1.2;margin-top:3px;color:#1e293b}
+@media (max-width: 768px) {
+  .songbook-sheet{grid-template-columns:1fr;gap:20px}
+  .songbook-sheet::before{display:none}
+  .songbook-page{max-width:440px;margin:0 auto;box-shadow:0 4px 16px rgba(0,0,0,0.06)}
+}
 @media print{
   @page{size:A4 landscape;margin:5mm}
   body{margin:0;background:white}
   .songbook-wrapper{border:2px solid #000!important;padding:5mm!important;margin:0 0 10mm 0!important}
+  .songbook-sheet{display:grid!important;grid-template-columns:1fr 1fr!important;gap:6mm!important}
+  .songbook-sheet::before{display:block!important;border-left:1.5px dashed #94a3b8!important}
+  .songbook-page{max-width:none!important;margin:0!important;box-shadow:none!important}
   .page-header h2{color:#ef4444!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .song-card img{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
@@ -347,7 +360,7 @@ ${previewHtml}
 </body>
 </html>`;
 
-  download(doc, `${slug(title)}_송북_A4가로.html`, 'text/html;charset=utf-8');
+  download(doc, `${slug(title)}_송북_A5_A4가로.html`, 'text/html;charset=utf-8');
 };
 
 // 작업 백업 HTML 저장
@@ -358,7 +371,7 @@ $('saveBackupHtml').onclick = () => {
   download(backupDoc, `${slug(title)}_작업백업.html`, 'text/html;charset=utf-8');
 };
 
-// 음원 모달 창
+// 음원 MP3 다운로드 모달 창 (진짜 MP3 다운로드 링크 연결)
 $('downloadMp3Btn').onclick = () => {
   const modal = $('mp3Modal');
   const list = $('mp3List');
@@ -374,13 +387,21 @@ $('downloadMp3Btn').onclick = () => {
     const c = (data[t.order].candidates || []).find(x => x.audioPick) || (data[t.order].candidates || [])[0];
     const row = document.createElement('div');
     row.className = 'mp3-item';
+    
+    // 신뢰할 수 있는 2가지 MP3 직통 다운로드 서비스 링크
+    const dirpyUrl = c?.url ? `https://dirpy.com/studio?url=${encodeURIComponent(c.url)}` : '';
+    const cobaltUrl = c?.url ? `https://cobalt.tools/?u=${encodeURIComponent(c.url)}` : '';
+
     row.innerHTML = `
       <div>
         <strong style="font-size:13px">${escapeAttr(t.name)}</strong>
         <div style="font-size:11px;color:var(--muted)">${escapeAttr(c?.title || '후보 미선택')}</div>
       </div>
-      <div>
-        ${c?.url ? `<a href="${c.url}" target="_blank" class="btn primary" style="font-size:11px;text-decoration:none;padding:5px 9px">영상/음원 열기</a>` : '<span style="font-size:11px;color:var(--muted)">URL 없음</span>'}
+      <div class="mp3-btn-group">
+        ${dirpyUrl ? `
+          <a href="${dirpyUrl}" target="_blank" class="btn accent" style="font-size:11px;text-decoration:none;padding:5px 9px">MP3 저장 1</a>
+          <a href="${cobaltUrl}" target="_blank" class="btn" style="font-size:11px;text-decoration:none;padding:5px 9px">MP3 저장 2</a>
+        ` : '<span style="font-size:11px;color:var(--muted)">URL 없음</span>'}
       </div>
     `;
     list.appendChild(row);
