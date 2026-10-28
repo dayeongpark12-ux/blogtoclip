@@ -95,8 +95,8 @@ function renderEditors() {
       const card = document.createElement('div');
       card.className = 'candidate';
       
-      // 영상 페이지가 아니라 실제 MP3 추출기로 바로 연결되는 링크 생성
-      const mp3DownloadUrl = c.url ? `https://dirpy.com/studio?url=${encodeURIComponent(c.url)}` : '';
+      // 국내 통신사(SKT/KT/LGU+) 차단 없는 검증된 다운로드 링크
+      const mp3DownloadUrl = c.url ? `https://en.savefrom.net/1-youtube-video-downloader-78a/?url=${encodeURIComponent(c.url)}` : '';
 
       card.innerHTML = `
         <img alt="후보 썸네일" src="${escapeAttr(c.image || '')}">
@@ -388,19 +388,21 @@ $('downloadMp3Btn').onclick = () => {
     const row = document.createElement('div');
     row.className = 'mp3-item';
     
-    // 신뢰할 수 있는 2가지 MP3 직통 다운로드 서비스 링크
-    const dirpyUrl = c?.url ? `https://dirpy.com/studio?url=${encodeURIComponent(c.url)}` : '';
-    const cobaltUrl = c?.url ? `https://cobalt.tools/?u=${encodeURIComponent(c.url)}` : '';
+    // 국내 통신사 DNS 차단 없는 글로벌 다운로더 3가지 채널 제공
+    const savefromUrl = c?.url ? `https://en.savefrom.net/1-youtube-video-downloader-78a/?url=${encodeURIComponent(c.url)}` : '';
+    const yt1sUrl = c?.url ? `https://yt1s.com/en/youtube-to-mp3?q=${encodeURIComponent(c.url)}` : '';
+    const loaderUrl = c?.url ? `https://loader.to/api/button/?url=${encodeURIComponent(c.url)}&f=mp3` : '';
 
     row.innerHTML = `
       <div>
         <strong style="font-size:13px">${escapeAttr(t.name)}</strong>
         <div style="font-size:11px;color:var(--muted)">${escapeAttr(c?.title || '후보 미선택')}</div>
       </div>
-      <div class="mp3-btn-group">
-        ${dirpyUrl ? `
-          <a href="${dirpyUrl}" target="_blank" class="btn accent" style="font-size:11px;text-decoration:none;padding:5px 9px">MP3 저장 1</a>
-          <a href="${cobaltUrl}" target="_blank" class="btn" style="font-size:11px;text-decoration:none;padding:5px 9px">MP3 저장 2</a>
+      <div class="mp3-btn-group" style="display:flex;gap:4px">
+        ${c?.url ? `
+          <a href="${savefromUrl}" target="_blank" class="btn accent" style="font-size:11px;text-decoration:none;padding:4px 8px">다운로드 1</a>
+          <a href="${yt1sUrl}" target="_blank" class="btn" style="font-size:11px;text-decoration:none;padding:4px 8px">다운로드 2</a>
+          <a href="${loaderUrl}" target="_blank" class="btn" style="font-size:11px;text-decoration:none;padding:4px 8px">다운로드 3</a>
         ` : '<span style="font-size:11px;color:var(--muted)">URL 없음</span>'}
       </div>
     `;
@@ -419,6 +421,47 @@ $('downloadUrlTxt').onclick = () => {
     if (c?.url) lines.push(`${t.name}: ${c.url}`);
   });
   download(lines.join('\r\n'), `${slug($('album').value)}_음원링크.txt`, 'text/plain;charset=utf-8');
+};
+
+// Python 자동 일괄 다운로더 스크립트 생성
+$('downloadPyScript').onclick = () => {
+  const albumName = $('album').value.trim() || '타요의 씽씽극장';
+  const urls = [];
+  tracks.forEach(t => {
+    if (!data[t.order]?.selected) return;
+    const c = (data[t.order].candidates || []).find(x => x.audioPick) || (data[t.order].candidates || [])[0];
+    if (c?.url) urls.push({ name: t.name, url: c.url });
+  });
+
+  if (!urls.length) { alert('선택된 음원 URL이 없습니다.'); return; }
+
+  const pyCode = `# -*- coding: utf-8 -*-
+# ${albumName} 전곡 자동 MP3 다운로더
+import os, subprocess, sys
+
+try:
+    import yt_dlp
+except ImportError:
+    print("yt-dlp 설치 중...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "yt-dlp"])
+
+tracks = ${JSON.stringify(urls, null, 2)}
+folder = "${slug(albumName)}_MP3"
+os.makedirs(folder, exist_ok=True)
+
+for i, t in enumerate(tracks, 1):
+    print(f"[{i}/{len(tracks)}] {t['name']} 다운로드 중...")
+    cmd = [
+        sys.executable, "-m", "yt_dlp",
+        "-x", "--audio-format", "mp3", "--audio-quality", "0",
+        "-o", os.path.join(folder, f"{i:02d}_{t['name']}.%(ext)s"),
+        t["url"]
+    ]
+    subprocess.run(cmd)
+
+print(f"\n모든 곡이 '{folder}' 폴더에 성공적으로 저장되었습니다!")
+`;
+  download(pyCode, `${slug(albumName)}_전곡다운로더.py`, 'text/x-python;charset=utf-8');
 };
 
 // PC 일괄 다운로드 배치파일(.bat)
