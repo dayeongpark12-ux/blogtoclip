@@ -1,18 +1,15 @@
 // ============================================================
 // 1. YouTube Data API v3 키 고정 설정
-// 발급받으신 키를 아래 따옴표 안에 적어두시면 어떤 환경에서도 자동 적용됩니다.
 // ============================================================
 const FIXED_YOUTUBE_API_KEY = ""; 
 
 const $ = id => document.getElementById(id);
 let tracks = [], data = {};
 
-// 수록곡 분리
 function parseSongs() {
   return $('songs').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
 }
 
-// 곡 목록 적용 (기본: 모두 추출 체크)
 function applySongs() {
   const oldByName = {};
   tracks.forEach((t, i) => { oldByName[t.name] = data[i]; });
@@ -35,7 +32,6 @@ function applySongs() {
   renderOutput();
 }
 
-// 2. 수록곡 목록 렌더링
 function renderTracks() {
   const root = $('tracklist');
   root.innerHTML = '';
@@ -59,7 +55,6 @@ function renderTracks() {
   });
 }
 
-// 3. 곡별 유튜브 후보 지정 섹션
 function renderEditors() {
   const root = $('candidateEditor');
   root.innerHTML = '';
@@ -97,7 +92,7 @@ function renderEditors() {
       const mp3DownloadUrl = c.url ? `https://en.savefrom.net/1-youtube-video-downloader-78a/?url=${encodeURIComponent(c.url)}` : '';
 
       card.innerHTML = `
-        <img alt="후보 썸네일" src="${escapeAttr(c.image || '')}">
+        <div class="thumb-box"><img alt="후보 썸네일" src="${escapeAttr(c.image || '')}"></div>
         <h3>${escapeAttr(c.title || '제목 없음')}</h3>
         <div class="meta">⏱️ 재생시간: ${escapeAttr(c.duration || '-')}</div>
         <div class="pick">
@@ -157,7 +152,7 @@ function syncCandidates(i) {
   });
 }
 
-// 4. 미리보기 렌더링: 1개 송북 = 헤드라인 + 썸네일/곡명 최대 8개
+// 4. 미리보기 렌더링: 1번 사진 완벽 일치 (중앙 정렬, 자동차 아이콘 삭제, 테두리 삭제, 검정 띠 크롭)
 function renderOutput() {
   const selected = tracks.filter((t, i) => data[i]?.selected);
   $('count').textContent = selected.length + '곡 선택';
@@ -167,33 +162,20 @@ function renderOutput() {
 
   const headlineText = $('headline').value || $('album').value || '타요의 씽씽극장';
 
-  // 1개 송북당 최대 8곡
   const pageSize = 8;
   const totalSongbooks = Math.ceil(selected.length / pageSize) || 1;
 
   for (let s = 0; s < totalSongbooks; s++) {
     const pageItems = selected.slice(s * pageSize, (s + 1) * pageSize);
 
-    // 1개의 순수 송북 컨테이너
     const songbookCard = document.createElement('div');
     songbookCard.className = 'single-songbook';
     songbookCard.dataset.songbookIndex = s + 1;
 
-    // 상단 헤더: 타요 버스 아이콘 + 볼드체 빨간색 로고 타이틀
+    // 헤드라인 중앙 정렬 & 자동차 그림 삭제
     const headerDiv = document.createElement('div');
     headerDiv.className = 'songbook-header';
-    headerDiv.innerHTML = `
-      <svg class="bus-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="4" y="8" width="32" height="24" rx="6" fill="#0284c7"/>
-        <rect x="8" y="12" width="24" height="10" rx="3" fill="#e0f2fe"/>
-        <circle cx="12" cy="17" r="2.5" fill="#0f172a"/>
-        <circle cx="28" cy="17" r="2.5" fill="#0f172a"/>
-        <circle cx="11" cy="31" r="3.5" fill="#334155"/>
-        <circle cx="29" cy="31" r="3.5" fill="#334155"/>
-        <rect x="14" y="24" width="12" height="4" rx="2" fill="#fff"/>
-      </svg>
-      <h2>${escapeAttr(headlineText)}</h2>
-    `;
+    headerDiv.innerHTML = `<h2>${escapeAttr(headlineText)}</h2>`;
     songbookCard.appendChild(headerDiv);
 
     // 2열 4행 그리드
@@ -204,19 +186,26 @@ function renderOutput() {
       const i = t.order;
       const c = data[i].candidates.find(x => x.imagePick) || data[i].candidates[0];
       const item = document.createElement('div');
-      item.className = 'song-item';
+      item.className = 'song-item'; // 개별 카드 테두리 삭제됨
 
       if (c && c.image) {
+        // 검정 띠를 잘라내는 thumb-crop 래퍼 적용
+        const cropDiv = document.createElement('div');
+        cropDiv.className = 'thumb-crop';
         const img = document.createElement('img');
-        img.crossOrigin = 'anonymous'; // 캔버스/PDF 추출용 CORS 허용
+        img.crossOrigin = 'anonymous';
         img.src = c.image;
         img.alt = t.name;
-        item.appendChild(img);
+        cropDiv.appendChild(img);
+        item.appendChild(cropDiv);
       } else {
+        const cropDiv = document.createElement('div');
+        cropDiv.className = 'thumb-crop';
         const missing = document.createElement('div');
         missing.className = 'missing';
         missing.textContent = '후보 미선택';
-        item.appendChild(missing);
+        cropDiv.appendChild(missing);
+        item.appendChild(cropDiv);
       }
 
       const cap = document.createElement('div');
@@ -229,7 +218,7 @@ function renderOutput() {
 
     songbookCard.appendChild(gridDiv);
 
-    // 각 송북 카드 바로 아래 개별 저장 버튼 추가
+    // 송북 개별 저장 액션
     const actionsDiv = document.createElement('div');
     actionsDiv.className = 'songbook-actions no-print';
     actionsDiv.innerHTML = `
@@ -243,15 +232,13 @@ function renderOutput() {
   }
 }
 
-// 5. PDF & 이미지 직접 저장 엔진 (html2canvas + jsPDF 활용)
 async function renderSongbookToCanvas(songbookElement) {
-  // 개별 액션바 임시 숨김 처리
   const actions = songbookElement.querySelector('.songbook-actions');
   if (actions) actions.style.display = 'none';
 
   try {
     const canvas = await html2canvas(songbookElement, {
-      scale: 2, // 고해상도 (2배 레티나 화질)
+      scale: 2,
       useCORS: true,
       allowTaint: true,
       backgroundColor: '#ffffff'
@@ -262,7 +249,6 @@ async function renderSongbookToCanvas(songbookElement) {
   }
 }
 
-// 개별 송북 저장 함수
 window.exportSingleSongbook = async function(index, format) {
   const songbooks = document.querySelectorAll('.single-songbook');
   const target = songbooks[index];
@@ -289,11 +275,9 @@ window.exportSingleSongbook = async function(index, format) {
   } else if (format === 'pdf') {
     const { jsPDF } = window.jspdf || {};
     if (!jsPDF) {
-      alert('jsPDF 라이브러리가 준비되지 않았습니다. 인쇄 창에서 PDF로 저장해 주세요.');
       window.print();
       return;
     }
-    // A5 세로 비율 (148 x 210mm)
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' });
     const imgData = canvas.toDataURL('image/jpeg', 0.95);
     pdf.addImage(imgData, 'JPEG', 5, 5, 138, (canvas.height * 138) / canvas.width);
@@ -301,7 +285,6 @@ window.exportSingleSongbook = async function(index, format) {
   }
 };
 
-// 전체 송북 PDF 일괄 저장
 $('downloadAllPdfBtn').onclick = async () => {
   const songbooks = document.querySelectorAll('.single-songbook');
   if (!songbooks.length) { alert('선택된 곡이 없습니다.'); return; }
@@ -337,7 +320,6 @@ $('downloadAllPdfBtn').onclick = async () => {
   }
 };
 
-// 전체 송북 이미지(PNG) 일괄 저장
 $('downloadAllImgBtn').onclick = async () => {
   const songbooks = document.querySelectorAll('.single-songbook');
   if (!songbooks.length) { alert('선택된 곡이 없습니다.'); return; }
@@ -366,7 +348,6 @@ $('downloadAllImgBtn').onclick = async () => {
   }
 };
 
-// 유튜브 API 검색
 async function searchYouTube(i, button) {
   const key = getApiKey();
   if (!key) {
@@ -428,7 +409,6 @@ function getApiKey() {
   return localStorage.getItem('albumToolYouTubeKey') || '';
 }
 
-// 송북 순수 HTML 저장
 $('savePreviewHtml').onclick = () => {
   const title = $('headline').value || $('album').value || '타요의 씽씽극장';
   const previewHtml = $('previewContainer').innerHTML;
@@ -442,21 +422,21 @@ $('savePreviewHtml').onclick = () => {
 <title>${escapeAttr(title)} - 송북</title>
 <style>
 body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;margin:16px;background:#f8fafc;color:#1e293b;display:flex;flex-direction:column;align-items:center;gap:20px}
-.single-songbook{border:2px dashed #94a3b8;border-radius:14px;padding:16px;background:#fff;width:100%;max-width:480px;display:flex;flex-direction:column;box-shadow:0 4px 16px rgba(0,0,0,0.06)}
-.songbook-header{display:flex;align-items:center;gap:10px;padding-bottom:10px;margin-bottom:12px;border-bottom:2px dashed #cbd5e1}
-.songbook-header .bus-icon{width:34px;height:34px}
-.songbook-header h2{margin:0;font-size:22px;font-weight:900;color:#ef4444}
-.songbook-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4, minmax(0, 1fr));gap:10px 8px}
-.song-item{border:1px dashed #cbd5e1;border-radius:8px;padding:4px;display:flex;flex-direction:column;align-items:center;text-align:center}
-.song-item img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:6px;display:block}
-.song-item .song-title{font-size:11.5px;font-weight:700;line-height:1.2;margin-top:4px;color:#1e293b}
+.single-songbook{border:2px dashed #94a3b8;border-radius:14px;padding:16px 14px 18px;background:#fff;width:100%;max-width:440px;display:flex;flex-direction:column;box-shadow:0 4px 16px rgba(0,0,0,0.06)}
+.songbook-header{display:flex;justify-content:center;align-items:center;padding-bottom:10px;margin-bottom:14px;border-bottom:2px dashed #cbd5e1;text-align:center}
+.songbook-header h2{margin:0;font-size:24px;font-weight:900;color:#ef4444;text-align:center}
+.songbook-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4, minmax(0, 1fr));gap:12px 10px}
+.song-item{border:none;padding:0;background:transparent;display:flex;flex-direction:column;align-items:center;text-align:center}
+.thumb-crop{width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:8px;background:#f1f5f9}
+.thumb-crop img{width:100%;height:100%;object-fit:cover;transform:scale(1.18);display:block}
+.song-item .song-title{font-size:12px;font-weight:700;line-height:1.2;margin-top:5px;color:#1e293b;text-align:center}
 .songbook-actions{display:none}
 @media print{
   @page{size:A4 portrait;margin:8mm}
   body{background:white;margin:0}
-  .single-songbook{page-break-after:always;border:2px dashed #000!important;max-width:none!important;margin:0 0 10mm 0;box-shadow:none!important}
+  .single-songbook{page-break-after:always;border:2px dashed #000!important;max-width:none!important;margin:0 0 12mm 0;box-shadow:none!important}
   .songbook-header h2{color:#ef4444!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .song-item img{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .thumb-crop img{-webkit-print-color-adjust:exact;print-color-adjust:exact;transform:scale(1.18)!important}
 }
 </style>
 </head>
@@ -468,7 +448,6 @@ ${previewHtml}
   download(doc, `${slug(title)}_송북.html`, 'text/html;charset=utf-8');
 };
 
-// MP3 모달
 $('downloadMp3Btn').onclick = () => {
   const modal = $('mp3Modal');
   const list = $('mp3List');
