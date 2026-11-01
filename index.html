@@ -47,7 +47,7 @@ textarea{min-height:130px;resize:vertical;font-size:13px;line-height:1.5}
 .candidates{display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;margin-top:12px}
 .candidate{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff;display:flex;flex-direction:column}
 .candidate .thumb-box{width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:8px;background:#e2e8f0}
-.candidate .thumb-box img{width:100%;height:100%;object-fit:cover;transform:scale(1.18);display:block}
+.candidate .thumb-box img{width:100%;height:100%;object-fit:cover;transform:scale(1.34);display:block}
 .candidate h3{font-size:13px;line-height:1.4;margin:8px 0 4px;overflow-wrap:anywhere}
 .candidate .meta{font-size:11px;color:var(--muted);margin-bottom:8px}
 .candidate .pick{display:flex;gap:8px;margin-top:auto;padding-top:8px;border-top:1px solid var(--line);font-size:12px;align-items:center;justify-content:space-between}
@@ -65,7 +65,7 @@ textarea{min-height:130px;resize:vertical;font-size:13px;line-height:1.5}
 
 /* 1개의 독립된 송북 카드 (A5 규격) */
 .single-songbook{
-  border:2px dashed #94a3b8;
+  border:1px dashed #94a3b8;
   border-radius:14px;
   padding:16px 14px 18px;
   background:#ffffff;
@@ -81,9 +81,9 @@ textarea{min-height:130px;resize:vertical;font-size:13px;line-height:1.5}
   display:flex;
   justify-content:center;
   align-items:center;
-  padding-bottom:10px;
+  padding-bottom:4px;
   margin-bottom:14px;
-  border-bottom:2px dashed #cbd5e1;
+  border-bottom:none;
   text-align:center;
 }
 .songbook-header h2{
@@ -129,7 +129,7 @@ textarea{min-height:130px;resize:vertical;font-size:13px;line-height:1.5}
   width:100%;
   height:100%;
   object-fit:cover;
-  transform:scale(1.18); /* 유튜브 4:3 썸네일 상하 검정 띠 완전 크롭 */
+  transform:scale(1.34); /* 유튜브 4:3 썸네일 상하 검정 띠 완전 크롭 */
   display:block;
 }
 .thumb-crop .missing{
@@ -179,9 +179,9 @@ textarea{min-height:130px;resize:vertical;font-size:13px;line-height:1.5}
   .no-print,header,.sub,.panel:not(#previewPanel),.songbook-actions{display:none!important}
   #previewPanel{border:0!important;padding:0!important;margin:0!important;background:transparent!important}
   .songbooks-container{display:block!important}
-  .single-songbook{page-break-after:always;border:2px dashed #000!important;max-width:none!important;margin:0 0 12mm 0!important;box-shadow:none!important;padding:8mm!important}
+  .single-songbook{page-break-after:always;border:1px dashed #000!important;max-width:none!important;margin:0 0 12mm 0!important;box-shadow:none!important;padding:8mm!important}
   .songbook-header h2{color:#ef4444!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .thumb-crop img{-webkit-print-color-adjust:exact;print-color-adjust:exact;transform:scale(1.18)!important}
+  .thumb-crop img{-webkit-print-color-adjust:exact;print-color-adjust:exact;transform:scale(1.34)!important}
 }
 </style>
 </head>

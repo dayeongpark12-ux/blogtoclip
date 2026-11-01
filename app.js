@@ -422,21 +422,21 @@ $('savePreviewHtml').onclick = () => {
 <title>${escapeAttr(title)} - 송북</title>
 <style>
 body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;margin:16px;background:#f8fafc;color:#1e293b;display:flex;flex-direction:column;align-items:center;gap:20px}
-.single-songbook{border:2px dashed #94a3b8;border-radius:14px;padding:16px 14px 18px;background:#fff;width:100%;max-width:440px;display:flex;flex-direction:column;box-shadow:0 4px 16px rgba(0,0,0,0.06)}
-.songbook-header{display:flex;justify-content:center;align-items:center;padding-bottom:10px;margin-bottom:14px;border-bottom:2px dashed #cbd5e1;text-align:center}
+.single-songbook{border:1px dashed #94a3b8;border-radius:14px;padding:16px 14px 18px;background:#fff;width:100%;max-width:440px;display:flex;flex-direction:column;box-shadow:0 4px 16px rgba(0,0,0,0.06)}
+.songbook-header{display:flex;justify-content:center;align-items:center;padding-bottom:10px;margin-bottom:14px;border-bottom:none;text-align:center}
 .songbook-header h2{margin:0;font-size:24px;font-weight:900;color:#ef4444;text-align:center}
 .songbook-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4, minmax(0, 1fr));gap:12px 10px}
 .song-item{border:none;padding:0;background:transparent;display:flex;flex-direction:column;align-items:center;text-align:center}
 .thumb-crop{width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:8px;background:#f1f5f9}
-.thumb-crop img{width:100%;height:100%;object-fit:cover;transform:scale(1.18);display:block}
+.thumb-crop img{width:100%;height:100%;object-fit:cover;transform:scale(1.34);display:block}
 .song-item .song-title{font-size:12px;font-weight:700;line-height:1.2;margin-top:5px;color:#1e293b;text-align:center}
 .songbook-actions{display:none}
 @media print{
   @page{size:A4 portrait;margin:8mm}
   body{background:white;margin:0}
-  .single-songbook{page-break-after:always;border:2px dashed #000!important;max-width:none!important;margin:0 0 12mm 0;box-shadow:none!important}
+  .single-songbook{page-break-after:always;border:1px dashed #000!important;max-width:none!important;margin:0 0 12mm 0;box-shadow:none!important}
   .songbook-header h2{color:#ef4444!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .thumb-crop img{-webkit-print-color-adjust:exact;print-color-adjust:exact;transform:scale(1.18)!important}
+  .thumb-crop img{-webkit-print-color-adjust:exact;print-color-adjust:exact;transform:scale(1.34)!important}
 }
 </style>
 </head>
