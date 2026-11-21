@@ -1,15 +1,40 @@
 // ============================================================
-// 1. YouTube Data API v3 키 고정 설정
+// 1. YouTube Data API v3 키 고정 설정 (필요 시 직접 기입 가능)
 // ============================================================
 const FIXED_YOUTUBE_API_KEY = ""; 
 
 const $ = id => document.getElementById(id);
 let tracks = [], data = {};
+let backendAvailable = null; // null: 미확인, true: /api/search 사용 가능, false: 미지원
 
+// 수록곡 텍스트 파싱
 function parseSongs() {
   return $('songs').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
 }
 
+// 수록곡 입력창 라인 번호 및 카운트 실시간 갱신 (우리 방식)
+function updateLineNumbers() {
+  const textarea = $('songs');
+  const gutter = $('lineNumbers');
+  const badge = $('songsCountBadge');
+  if (!textarea || !gutter) return;
+
+  const lines = textarea.value.split('\n');
+  const validCount = lines.filter(l => l.trim().length > 0).length;
+
+  let nums = '';
+  const totalLines = Math.max(lines.length, 1);
+  for (let i = 1; i <= totalLines; i++) {
+    nums += i + '\n';
+  }
+  gutter.textContent = nums.trimEnd();
+
+  if (badge) {
+    badge.textContent = `${validCount}곡 입력됨`;
+  }
+}
+
+// 수록곡 목록 적용
 function applySongs() {
   const oldByName = {};
   tracks.forEach((t, i) => { oldByName[t.name] = data[i]; });
@@ -30,8 +55,10 @@ function applySongs() {
   renderTracks();
   renderEditors();
   renderOutput();
+  updateLineNumbers();
 }
 
+// 2. 수록곡 목록 체크박스 렌더링
 function renderTracks() {
   const root = $('tracklist');
   root.innerHTML = '';
@@ -55,6 +82,7 @@ function renderTracks() {
   });
 }
 
+// 3. 유튜브 후보 편집기 렌더링
 function renderEditors() {
   const root = $('candidateEditor');
   root.innerHTML = '';
@@ -76,7 +104,7 @@ function renderEditors() {
 
     const searchBtn = document.createElement('button');
     searchBtn.className = 'btn primary';
-    searchBtn.textContent = '유튜브 후보 검색';
+    searchBtn.textContent = '유튜브 후보 재검색';
     searchBtn.onclick = () => searchYouTube(i, searchBtn);
     searchRow.appendChild(searchBtn);
     wrap.appendChild(searchRow);
@@ -152,15 +180,13 @@ function syncCandidates(i) {
   });
 }
 
-// 4. 미리보기 렌더링: 1번 사진 완벽 일치 (중앙 정렬, 자동차 아이콘 삭제, 테두리 삭제, 검정 띠 크롭)
+// 4. 미리보기 렌더링: 상단 헤드라인 완전 제외, 우리 크롭 방식 적용(16:9 비율 유지, scale 왜곡 없음)
 function renderOutput() {
   const selected = tracks.filter((t, i) => data[i]?.selected);
   $('count').textContent = selected.length + '곡 선택';
 
   const container = $('previewContainer');
   container.innerHTML = '';
-
-  const headlineText = $('headline').value || $('album').value || '타요의 씽씽극장';
 
   const pageSize = 8;
   const totalSongbooks = Math.ceil(selected.length / pageSize) || 1;
@@ -172,11 +198,7 @@ function renderOutput() {
     songbookCard.className = 'single-songbook';
     songbookCard.dataset.songbookIndex = s + 1;
 
-    // 헤드라인 중앙 정렬 & 자동차 그림 삭제
-    const headerDiv = document.createElement('div');
-    headerDiv.className = 'songbook-header';
-    headerDiv.innerHTML = `<h2>${escapeAttr(headlineText)}</h2>`;
-    songbookCard.appendChild(headerDiv);
+    // [요청 반영] 상단 헤드라인(중앙정렬) 완전 제외! 헤더 없이 바로 2열 4행 카드가 시작됩니다.
 
     // 2열 4행 그리드
     const gridDiv = document.createElement('div');
@@ -186,10 +208,10 @@ function renderOutput() {
       const i = t.order;
       const c = data[i].candidates.find(x => x.imagePick) || data[i].candidates[0];
       const item = document.createElement('div');
-      item.className = 'song-item'; // 개별 카드 테두리 삭제됨
+      item.className = 'song-item';
 
       if (c && c.image) {
-        // 검정 띠를 잘라내는 thumb-crop 래퍼 적용
+        // 우리 크롭 방식: 16:9 비율 래퍼 + object-fit: cover (인위적 1.34배 줌 삭제)
         const cropDiv = document.createElement('div');
         cropDiv.className = 'thumb-crop';
         const img = document.createElement('img');
@@ -254,7 +276,7 @@ window.exportSingleSongbook = async function(index, format) {
   const target = songbooks[index];
   if (!target) return;
 
-  const title = $('headline').value || $('album').value || '타요_송북';
+  const title = $('album')?.value || '타요_송북';
 
   if (typeof html2canvas === 'undefined') {
     alert('PDF/이미지 라이브러리를 불러오는 중입니다. 잠시 후 다시 시도해 주세요.');
@@ -300,7 +322,7 @@ $('downloadAllPdfBtn').onclick = async () => {
       return;
     }
 
-    const title = $('headline').value || $('album').value || '타요_송북';
+    const title = $('album')?.value || '타요_송북';
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' });
 
     for (let i = 0; i < songbooks.length; i++) {
@@ -329,7 +351,7 @@ $('downloadAllImgBtn').onclick = async () => {
   btn.textContent = '이미지 생성 중…';
 
   try {
-    const title = $('headline').value || $('album').value || '타요_송북';
+    const title = $('album')?.value || '타요_송북';
     for (let i = 0; i < songbooks.length; i++) {
       const canvas = await renderSongbookToCanvas(songbooks[i]);
       canvas.toBlob(blob => {
@@ -348,41 +370,77 @@ $('downloadAllImgBtn').onclick = async () => {
   }
 };
 
-async function searchYouTube(i, button) {
-  const key = getApiKey();
-  if (!key) {
-    alert('YouTube Data API v3 키를 입력해 주세요.\n한 번 입력하시면 자동 고정됩니다.');
-    $('ytkey').focus();
-    return;
+// 단일 곡 유튜브 후보 검색 함수 (/api/search 지원 및 YouTube Data API v3 연동)
+async function searchTrackCandidates(trackName) {
+  const album = ($('album')?.value || '').trim();
+  const query = (album ? album + ' ' + trackName : trackName).trim();
+
+  // 1. 로컬 또는 원격 백엔드 /api/search 시도
+  if (backendAvailable !== false) {
+    try {
+      const resp = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keywords: [query], limit: 6 })
+      });
+      if (resp.ok) {
+        const json = await resp.json();
+        if (json.status === 'ok' && json.results && json.results[0] && json.results[0].candidates?.length > 0) {
+          backendAvailable = true;
+          return json.results[0].candidates.map(c => ({
+            id: c.id,
+            title: c.title || '',
+            url: c.url || `https://www.youtube.com/watch?v=${c.id}`,
+            image: c.thumbnail || `https://i.ytimg.com/vi/${c.id}/hqdefault.jpg`,
+            duration: c.duration_str || secondsToDuration(c.duration || 0),
+            seconds: c.duration || 0
+          }));
+        }
+      } else {
+        backendAvailable = false;
+      }
+    } catch (e) {
+      backendAvailable = false;
+    }
   }
 
-  const track = tracks[i];
-  const query = ($('album').value.trim() + ' ' + track.name).trim();
+  // 2. YouTube Data API v3 조회
+  const key = getApiKey();
+  if (!key) {
+    throw new Error('API_KEY_REQUIRED');
+  }
+
+  const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=15&order=relevance&q=${encodeURIComponent(query)}&key=${encodeURIComponent(key)}`;
+  const sr = await fetch(searchUrl);
+  const sj = await sr.json();
+  if (!sr.ok) throw new Error(sj.error?.message || 'YouTube 검색 실패');
+
+  const ids = (sj.items || []).map(x => x.id?.videoId).filter(Boolean);
+  if (!ids.length) throw new Error('검색 결과가 없습니다.');
+
+  const detailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,snippet&id=${ids.join(',')}&key=${encodeURIComponent(key)}`;
+  const dr = await fetch(detailsUrl);
+  const dj = await dr.json();
+  if (!dr.ok) throw new Error(dj.error?.message || '상세 정보 획득 실패');
+
+  return (dj.items || []).map(v => ({
+    id: v.id,
+    title: v.snippet?.title || '',
+    url: `https://www.youtube.com/watch?v=${v.id}`,
+    image: v.snippet?.thumbnails?.high?.url || v.snippet?.thumbnails?.medium?.url || v.snippet?.thumbnails?.default?.url || `https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`,
+    duration: secondsToDuration(isoDurationToSeconds(v.contentDetails?.duration || '')),
+    seconds: isoDurationToSeconds(v.contentDetails?.duration || '')
+  }));
+}
+
+// 개별 곡 재검색
+async function searchYouTube(i, button) {
   button.disabled = true;
   button.textContent = '검색 중…';
 
   try {
-    const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=15&order=relevance&q=${encodeURIComponent(query)}&key=${encodeURIComponent(key)}`;
-    const sr = await fetch(searchUrl);
-    const sj = await sr.json();
-    if (!sr.ok) throw new Error(sj.error?.message || 'YouTube 검색 실패');
-
-    const ids = (sj.items || []).map(x => x.id?.videoId).filter(Boolean);
-    if (!ids.length) throw new Error('검색 결과가 없습니다.');
-
-    const detailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,snippet&id=${ids.join(',')}&key=${encodeURIComponent(key)}`;
-    const dr = await fetch(detailsUrl);
-    const dj = await dr.json();
-    if (!dr.ok) throw new Error(dj.error?.message || '상세 정보 획득 실패');
-
-    const results = (dj.items || []).map(v => ({
-      id: v.id,
-      title: v.snippet?.title || '',
-      url: `https://www.youtube.com/watch?v=${v.id}`,
-      image: v.snippet?.thumbnails?.high?.url || v.snippet?.thumbnails?.medium?.url || v.snippet?.thumbnails?.default?.url || '',
-      duration: secondsToDuration(isoDurationToSeconds(v.contentDetails?.duration || '')),
-      seconds: isoDurationToSeconds(v.contentDetails?.duration || '')
-    }));
+    const track = tracks[i];
+    const results = await searchTrackCandidates(track.name);
 
     data[i].allResults = results;
     data[i].visibleCount = 3;
@@ -395,10 +453,89 @@ async function searchYouTube(i, button) {
     renderEditors();
     renderOutput();
   } catch (e) {
-    alert('유튜브 후보 검색 오류: ' + e.message);
+    if (e.message === 'API_KEY_REQUIRED') {
+      alert('YouTube API 키가 필요합니다. 3번 섹션에 YouTube Data API v3 키를 입력해 주세요.');
+      $('ytkey')?.focus();
+    } else {
+      alert('유튜브 후보 검색 오류: ' + e.message);
+    }
   } finally {
     button.disabled = false;
-    button.textContent = '유튜브 후보 검색';
+    button.textContent = '유튜브 후보 재검색';
+  }
+}
+
+// [요청 반영] '유튜브 후보 찾기' 클릭 시 전곡 일괄 조회
+async function searchAllCandidates() {
+  // 먼저 입력된 수록곡 적용
+  applySongs();
+
+  const selectedIndices = tracks.map((t, idx) => idx).filter(i => data[i]?.selected);
+  if (!selectedIndices.length) {
+    alert('조회할 수록곡이 없습니다. 수록곡 목록을 입력하고 추출을 선택해 주세요.');
+    return;
+  }
+
+  const applyBtn = $('apply');
+  const statusBox = $('batchSearchStatus');
+  applyBtn.disabled = true;
+  if (statusBox) {
+    statusBox.style.display = 'block';
+    statusBox.style.background = '#e0f2fe';
+    statusBox.style.borderColor = '#bae6fd';
+    statusBox.style.color = '#0369a1';
+  }
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (let step = 0; step < selectedIndices.length; step++) {
+    const i = selectedIndices[step];
+    const trackName = tracks[i].name;
+    const currentNum = step + 1;
+    const totalNum = selectedIndices.length;
+
+    applyBtn.textContent = `⏳ [${currentNum}/${totalNum}] 검색 중... (${trackName})`;
+    if (statusBox) {
+      statusBox.innerHTML = `⏳ <strong>[${currentNum}/${totalNum}]</strong> "${escapeAttr(trackName)}" 유튜브 후보 검색 진행 중...`;
+    }
+
+    try {
+      const candidates = await searchTrackCandidates(trackName);
+      data[i].allResults = candidates;
+      data[i].visibleCount = 3;
+      data[i].candidates = candidates.slice(0, 3).map((r, idx) => ({
+        ...r,
+        imagePick: idx === 0,
+        audioPick: idx === 0
+      }));
+      successCount++;
+    } catch (err) {
+      failCount++;
+      if (err.message === 'API_KEY_REQUIRED') {
+        alert('YouTube Data API 키가 필요합니다. 3번 섹션에 API 키를 입력해 주세요.\n(자체 Python 서버로 실행 시에는 API 키 없이 바로 검색됩니다)');
+        $('ytkey')?.focus();
+        break;
+      }
+      console.warn(`[${trackName}] 검색 실패:`, err);
+    }
+
+    // 곡이 검색될 때마다 실시간으로 미리보기 반영
+    renderOutput();
+  }
+
+  renderEditors();
+  renderOutput();
+
+  applyBtn.disabled = false;
+  applyBtn.textContent = '🔍 유튜브 후보 찾기';
+
+  if (statusBox) {
+    statusBox.style.display = 'block';
+    statusBox.style.background = failCount === 0 ? '#f0fdf4' : '#fffbeb';
+    statusBox.style.borderColor = failCount === 0 ? '#bbf7d0' : '#fef3c7';
+    statusBox.style.color = failCount === 0 ? '#166534' : '#b45309';
+    statusBox.innerHTML = `🎉 <strong>일괄 조회 완료!</strong> 총 ${selectedIndices.length}곡 중 ${successCount}곡 성공` + (failCount > 0 ? ` (${failCount}곡 실패)` : '');
   }
 }
 
@@ -410,8 +547,9 @@ function getApiKey() {
 }
 
 $('savePreviewHtml').onclick = () => {
-  const title = $('headline').value || $('album').value || '타요의 씽씽극장';
+  const title = $('album')?.value || '타요의 씽씽극장';
   const previewHtml = $('previewContainer').innerHTML;
+  const currentFontClass = document.body.className || 'font-round';
 
   const doc = `<!doctype html>
 <html lang="ko">
@@ -420,27 +558,40 @@ $('savePreviewHtml').onclick = () => {
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeAttr(title)} - 송북</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/innks/NanumSquareRound@master/nanumsquareround.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
 <style>
-body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;margin:16px;background:#f8fafc;color:#1e293b;display:flex;flex-direction:column;align-items:center;gap:20px}
+@font-face {
+  font-family: 'Cafe24Ssurround';
+  src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2105_2@1.0/Cafe24Ssurround.woff') format('woff');
+}
+:root{
+  --title-font: 'NanumSquareRound', 'Pretendard', sans-serif;
+}
+body.font-round { --title-font: 'NanumSquareRound', 'Pretendard', sans-serif; }
+body.font-jua { --title-font: 'Jua', 'NanumSquareRound', sans-serif; }
+body.font-ssurround { --title-font: 'Cafe24Ssurround', 'NanumSquareRound', sans-serif; }
+body.font-pretendard { --title-font: 'Pretendard', sans-serif; }
+body.font-system { --title-font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+body{font-family:'Pretendard',sans-serif;margin:16px;background:#f8fafc;color:#1e293b;display:flex;flex-direction:column;align-items:center;gap:20px}
 .single-songbook{border:1px dashed #94a3b8;border-radius:14px;padding:16px 14px 18px;background:#fff;width:100%;max-width:440px;display:flex;flex-direction:column;box-shadow:0 4px 16px rgba(0,0,0,0.06)}
-.songbook-header{display:flex;justify-content:center;align-items:center;padding-bottom:10px;margin-bottom:14px;border-bottom:none;text-align:center}
-.songbook-header h2{margin:0;font-size:24px;font-weight:900;color:#ef4444;text-align:center}
 .songbook-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4, minmax(0, 1fr));gap:12px 10px}
 .song-item{border:none;padding:0;background:transparent;display:flex;flex-direction:column;align-items:center;text-align:center}
-.thumb-crop{width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:8px;background:#f1f5f9}
-.thumb-crop img{width:100%;height:100%;object-fit:cover;transform:scale(1.34);display:block}
-.song-item .song-title{font-size:12px;font-weight:700;line-height:1.2;margin-top:5px;color:#1e293b;text-align:center}
+.thumb-crop{width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:6px;background:#e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.08);position:relative}
+.thumb-crop img{width:100%;height:100%;object-fit:cover;display:block;border-radius:6px}
+.song-item .song-title{font-family:var(--title-font);font-size:12.5px;font-weight:800;line-height:1.25;margin-top:6px;color:#1e293b;text-align:center;letter-spacing:-0.02em}
 .songbook-actions{display:none}
 @media print{
   @page{size:A4 portrait;margin:8mm}
   body{background:white;margin:0}
-  .single-songbook{page-break-after:always;border:1px dashed #000!important;max-width:none!important;margin:0 0 12mm 0;box-shadow:none!important}
-  .songbook-header h2{color:#ef4444!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .thumb-crop img{-webkit-print-color-adjust:exact;print-color-adjust:exact;transform:scale(1.34)!important}
+  .single-songbook{page-break-after:always;border:1px dashed #000!important;max-width:none!important;margin:0 0 12mm 0;box-shadow:none!important;padding:8mm!important}
+  .thumb-crop img{-webkit-print-color-adjust:exact;print-color-adjust:exact;object-fit:cover!important}
+  .song-item .song-title{font-family:var(--title-font)!important;font-weight:800!important}
 }
 </style>
 </head>
-<body>
+<body class="${currentFontClass}">
 ${previewHtml}
 </body>
 </html>`;
@@ -585,19 +736,21 @@ function download(content, name, type) {
 
 try {
   const savedKey = localStorage.getItem('albumToolYouTubeKey');
-  if (savedKey) $('ytkey').value = savedKey;
+  if (savedKey && $('ytkey')) $('ytkey').value = savedKey;
 } catch (e) {}
-$('ytkey').onchange = () => {
-  try {
-    const val = $('ytkey').value.trim();
-    if (val) localStorage.setItem('albumToolYouTubeKey', val);
-  } catch (e) {}
-};
+if ($('ytkey')) {
+  $('ytkey').onchange = () => {
+    try {
+      const val = $('ytkey').value.trim();
+      if (val) localStorage.setItem('albumToolYouTubeKey', val);
+    } catch (e) {}
+  };
+}
 
-$('apply').onclick = applySongs;
+// 이벤트 핸들러 바인딩
+$('apply').onclick = searchAllCandidates;
 $('all').onclick = () => { tracks.forEach((t, i) => data[i].selected = true); renderTracks(); renderEditors(); renderOutput(); };
 $('none').onclick = () => { tracks.forEach((t, i) => data[i].selected = false); renderTracks(); renderEditors(); renderOutput(); };
-$('headline').oninput = renderOutput;
 $('album').onchange = renderEditors;
 $('csvin').onclick = () => $('csvfile').click();
 $('csvfile').onchange = async e => {
@@ -609,10 +762,39 @@ $('csvfile').onchange = async e => {
   renderTracks();
   renderEditors();
   renderOutput();
+  updateLineNumbers();
 };
 
+// 수록곡 입력창 실시간 라인 번호 동기화
+if ($('songs')) {
+  $('songs').addEventListener('input', updateLineNumbers);
+  $('songs').addEventListener('scroll', () => {
+    if ($('lineNumbers')) $('lineNumbers').scrollTop = $('songs').scrollTop;
+  });
+}
+
+// 글씨체 실시간 변경 이벤트
+if ($('fontSelect')) {
+  try {
+    const savedFont = localStorage.getItem('albumToolFont') || 'round';
+    $('fontSelect').value = savedFont;
+    document.body.className = `font-${savedFont}`;
+  } catch (e) {}
+
+  $('fontSelect').onchange = (e) => {
+    const val = e.target.value;
+    document.body.className = `font-${val}`;
+    try {
+      localStorage.setItem('albumToolFont', val);
+    } catch (err) {}
+    renderOutput();
+  };
+}
+
+// 초기 로딩 실행
 applySongs();
 tracks.forEach((t, i) => { if (data[i]) data[i].selected = true; });
 renderTracks();
 renderEditors();
 renderOutput();
+updateLineNumbers();
