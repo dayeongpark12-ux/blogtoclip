@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#f8fafc">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icon-192.png">
-<title>타요의 씽씽극장 썸네일 송북 도구</title>
+<title>썸네일 송북 도구</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <!-- 웹폰트: 둥글둥글 귀여운 동요/송북용 나눔스퀘어라운드, 주아체, 카페24써라운드, 프리텐다드 -->
@@ -82,18 +82,13 @@ textarea{min-height:130px;resize:vertical;font-size:13px;line-height:1.5}
   overflow:hidden;
 }
 
-/* 수록곡 목록 */
-.tracklist{display:grid;gap:6px}
-.track{display:grid;grid-template-columns:26px 1fr auto;gap:10px;align-items:center;border:1px solid var(--line);padding:8px 12px;border-radius:8px;background:#fff}
-.track input[type=checkbox]{width:16px;height:16px;cursor:pointer}
-.track .name{font-weight:700;font-size:13.5px;font-family:var(--title-font);letter-spacing:-0.02em}
-.track .num{color:var(--muted);font-size:12px;font-weight:700}
+
 
 /* 유튜브 후보 카드 스타일 (우리 방식: 16:9 비율 유지 + object-fit: cover, 왜곡 scale 제거) */
 .candidates{display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;margin-top:12px}
 .candidate{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff;display:flex;flex-direction:column}
 .candidate .thumb-box{width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:6px;background:#e2e8f0;position:relative}
-.candidate .thumb-box img{width:100%;height:100%;object-fit:cover;display:block;border-radius:6px}
+.candidate .thumb-box img{width:100%;height:100%;object-fit:cover;transform:scale(1.18);display:block;border-radius:6px}
 .candidate h3{font-size:13px;line-height:1.4;margin:8px 0 4px;overflow-wrap:anywhere;font-family:var(--title-font);font-weight:700}
 .candidate .meta{font-size:11px;color:var(--muted);margin-bottom:8px}
 .candidate .pick{display:flex;gap:8px;margin-top:auto;padding-top:8px;border-top:1px solid var(--line);font-size:12px;align-items:center;justify-content:space-between}
@@ -120,6 +115,25 @@ textarea{min-height:130px;resize:vertical;font-size:13px;line-height:1.5}
   box-shadow:0 4px 18px rgba(0,0,0,0.05);
   display:flex;
   flex-direction:column;
+}
+
+/* 송북 상단 앨범명 헤더 */
+.songbook-header{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  padding-bottom:6px;
+  margin-bottom:12px;
+  text-align:center;
+}
+.songbook-header h2{
+  margin:0;
+  font-size:23px;
+  font-weight:900;
+  color:#ef4444; /* 타요 레드 */
+  font-family:var(--title-font);
+  letter-spacing:-0.03em;
+  text-align:center;
 }
 
 /* 2열 4행 그리드 (최대 8개) */
@@ -157,6 +171,7 @@ textarea{min-height:130px;resize:vertical;font-size:13px;line-height:1.5}
   width:100%;
   height:100%;
   object-fit:cover;
+  transform:scale(1.18); /* 상단 및 하단 검정색 레터박스 띠 완전 크롭 */
   display:block;
   border-radius:6px;
 }
@@ -210,17 +225,13 @@ textarea{min-height:130px;resize:vertical;font-size:13px;line-height:1.5}
   #previewPanel{border:0!important;padding:0!important;margin:0!important;background:transparent!important}
   .songbooks-container{display:block!important}
   .single-songbook{page-break-after:always;border:1px dashed #000!important;max-width:none!important;margin:0 0 12mm 0!important;box-shadow:none!important;padding:8mm!important}
-  .thumb-crop img{-webkit-print-color-adjust:exact;print-color-adjust:exact;object-fit:cover!important}
+  .songbook-header h2{color:#ef4444!important;font-family:var(--title-font)!important;font-weight:900!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .thumb-crop img{-webkit-print-color-adjust:exact;print-color-adjust:exact;object-fit:cover!important;transform:scale(1.18)!important}
   .song-item .song-title{font-family:var(--title-font)!important;font-weight:800!important}
 }
 </style>
 </head>
 <body class="font-round"><main>
-<header class="no-print">
-  <h1>타요의 씽씽극장 썸네일 송북 도구</h1>
-  <p class="sub">상단 헤드라인 제외 · 입력 행 번호 표시 · 16:9 썸네일 크롭 · 감성 글씨체 선택 · 후보 일괄 조회</p>
-</header>
-
 <section class="panel no-print">
   <h2>1. 앨범명, 글씨체 및 수록곡 목록</h2>
   <div class="grid">
@@ -273,8 +284,6 @@ textarea{min-height:130px;resize:vertical;font-size:13px;line-height:1.5}
 
   <div class="row" style="margin-top:10px">
     <button class="btn primary" id="apply" style="font-weight:700;font-size:13.5px">🔍 유튜브 후보 찾기</button>
-    <button class="btn" id="all">전체 선택</button>
-    <button class="btn" id="none">전체 해제</button>
     <button class="btn" id="csvin">CSV 불러오기</button>
     <input id="csvfile" type="file" accept=".csv,text/csv" hidden>
   </div>
@@ -282,12 +291,7 @@ textarea{min-height:130px;resize:vertical;font-size:13px;line-height:1.5}
 </section>
 
 <section class="panel no-print">
-  <h2>2. 수록곡 목록 · 추출 여부 선택</h2>
-  <div id="tracklist" class="tracklist"></div>
-</section>
-
-<section class="panel no-print">
-  <h2>3. 곡별 유튜브 후보 지정</h2>
+  <h2>2. 곡별 유튜브 후보 지정 (각 3개 후보)</h2>
   <div style="margin-bottom:14px">
     <label for="ytkey">YouTube Data API v3 키 (선택 사항)</label>
     <input id="ytkey" type="password" autocomplete="off" placeholder="로컬 서버 미사용 시 YouTube API 키 입력 (1회 입력 시 자동 보관)">
@@ -298,7 +302,7 @@ textarea{min-height:130px;resize:vertical;font-size:13px;line-height:1.5}
 
 <section class="panel" id="previewPanel">
   <div class="row no-print" style="justify-content:space-between;margin-bottom:12px">
-    <h2 style="margin:0">송북 미리보기 (상단 헤드라인 제외 · 2열 4행 A5)</h2>
+    <h2 style="margin:0">송북 미리보기 (2열 4행 A5)</h2>
     <span id="count" style="font-size:12px;font-weight:700;color:var(--tayo-blue);background:#e0f2fe;padding:4px 8px;border-radius:6px">0곡 선택</span>
   </div>
   
