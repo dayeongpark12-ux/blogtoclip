@@ -7,12 +7,236 @@ const $ = id => document.getElementById(id);
 let tracks = [], data = {};
 let backendAvailable = null; // null: 미확인, true: /api/search 사용 가능, false: 미지원
 
+// ============================================================
+// [요청 반영 2] 인기 유아 동요 및 앨범별 공식 곡명 데이터베이스 & 오타 교정 제안
+// ============================================================
+const SONG_DATABASE = {
+  '핑크퐁 자동차 동요': [
+    '누가 제일 빠를까요', '출동! 소방차', '소방차와 세차', '경찰차', '포크레인', '세차송',
+    '힘센 중장비차', '부릉부릉 버스', '불이야 불', '트랙터', '헬리콥터', '기차',
+    '잠수함', '우주선', '레이싱카', '구급차', '쓰레기차', '레미콘', '불도저', '견인차'
+  ],
+  '핑크퐁 공룡 동요': [
+    '티라노사우루스', '트리케라톱스', '브라키오사우루스', '프테라노돈', '안킬로사우루스',
+    '스테고사우루스', '공룡 ABC', '내가 최고야', '화석이 될 거야', '공룡 따라 해봐요', '공룡 사파리'
+  ],
+  '타요의 씽씽극장': [
+    '오프닝', '꼬마버스가 출발합니다', '용감한 자동차들', '주룩주룩 첨벙첨벙', '천하장사 중장비',
+    '뚝딱뚝딱 만능 정비사', '꿈나라로 쿨쿨쿨', '많이 많이 닮았네', '정다운 시골여행',
+    '반짝반짝 상쾌한 하루', '행복을 배달해요', '푸른 하늘 높이', '환상의 우주 여행', '아침이 밝았어요', '엔딩'
+  ],
+  '뽀로로와 노래해요': [
+    '개구리', '일어날 시간이야', '바라밤', '꼭꼭 숨어라', '숫자놀이', '무지개', '개구쟁이',
+    '착한 어린이', '피아노 연주', '예쁜 아기곰', '남극 펭귄', '딩동댕', '어른들은 몰라요',
+    '붕붕붕 붕붕붕', '뚱보새', '뽀롱뽀롱 뽀로로 오프닝'
+  ],
+  '인기 유아동요': [
+    '병원차와 소방차', '밀과 보리가 자라네', '열 꼬마 인디언', '작은 별', '산토끼',
+    '곰 세 마리', '나비야', '악어 떼', '통통통통', '그대로 멈춰라', '올챙이와 개구리',
+    '둥근 해가 떴습니다', '사과 같은 내 얼굴', '멋쟁이 토마토', '솜사탕'
+  ]
+};
+
+// 레벤슈타인 편집 거리 계산
+function getLevenshteinDistance(a, b) {
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const matrix = [];
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
+// 오타 및 유사곡 제안 탐색 함수
+function findSongSuggestion(inputTitle, albumTitle = '') {
+  if (!inputTitle || typeof inputTitle !== 'string') return null;
+  const rawInput = inputTitle.trim();
+  const cleanInput = rawInput.replace(/\s+/g, '');
+  if (cleanInput.length < 2) return null;
+
+  const cleanAlbum = (albumTitle || $('album')?.value || '').trim();
+
+  // 1. 한국어 규칙 어미 변환 (~까 <-> ~까요, ~해 <-> ~해요, ~송 <-> ~노래)
+  const ruleSuggestions = [];
+  if (rawInput.endsWith('까')) {
+    ruleSuggestions.push(rawInput + '요');
+  } else if (rawInput.endsWith('까요')) {
+    ruleSuggestions.push(rawInput.slice(0, -1));
+  }
+  if (rawInput.endsWith('해')) {
+    ruleSuggestions.push(rawInput + '요');
+  } else if (rawInput.endsWith('송')) {
+    ruleSuggestions.push(rawInput.slice(0, -1) + ' 노래');
+  }
+
+  // 2. 검색 대상 풀 구성 (입력된 앨범명 우선 가중치)
+  let searchPool = [];
+  Object.keys(SONG_DATABASE).forEach(cat => {
+    const isCatMatch = cleanAlbum && (cleanAlbum.includes(cat.slice(0, 3)) || cat.includes(cleanAlbum.slice(0, 3)));
+    searchPool = searchPool.concat(SONG_DATABASE[cat].map(title => ({
+      title,
+      category: cat,
+      priority: isCatMatch ? 3 : 1
+    })));
+  });
+
+  // 3. 규칙 변환 결과가 DB에 있는지 우선 확인 (예: '누가 제일 빠를까' + '요' => '누가 제일 빠를까요')
+  for (const ruleSug of ruleSuggestions) {
+    const matched = searchPool.find(item => item.title.replace(/\s+/g, '') === ruleSug.replace(/\s+/g, ''));
+    if (matched) {
+      return {
+        original: rawInput,
+        suggested: matched.title,
+        reason: `'${matched.category}' 공식 곡명 '${matched.title}' 추천`,
+        category: matched.category
+      };
+    }
+  }
+
+  // 4. 입력어와 DB 내 곡들 간의 포함 및 유사도 검사
+  let bestMatch = null;
+  let maxScore = 0;
+
+  for (const item of searchPool) {
+    const dbClean = item.title.replace(/[\s!?,.~]/g, '');
+    const inClean = cleanInput.replace(/[\s!?,.~]/g, '');
+
+    if (dbClean === inClean) continue; // 완전 일치 시 제안 불필요
+
+    // 포함 관계 (예: '누가 제일 빠를까'가 '누가 제일 빠를까요'에 포함됨)
+    if (dbClean.includes(inClean) || inClean.includes(dbClean)) {
+      const matchLen = Math.min(dbClean.length, inClean.length);
+      const score = (matchLen / Math.max(dbClean.length, inClean.length)) * 10 + (item.priority * 2);
+      if (score > maxScore) {
+        maxScore = score;
+        bestMatch = item;
+      }
+      continue;
+    }
+
+    // Levenshtein 유사도
+    const dist = getLevenshteinDistance(inClean, dbClean);
+    const maxLen = Math.max(inClean.length, dbClean.length);
+    const similarity = 1 - (dist / maxLen);
+
+    if (similarity >= 0.55) {
+      const score = similarity * 10 + item.priority;
+      if (score > maxScore) {
+        maxScore = score;
+        bestMatch = item;
+      }
+    }
+  }
+
+  // DB에 직접 없더라도 확실한 한국어 어미 변환인 경우 (~까 -> ~까요)
+  if (!bestMatch && ruleSuggestions.length > 0 && rawInput.endsWith('까')) {
+    return {
+      original: rawInput,
+      suggested: ruleSuggestions[0],
+      reason: `어미 교정 ('${ruleSuggestions[0]}')`,
+      category: '어미 교정'
+    };
+  }
+
+  if (bestMatch && maxScore >= 6) {
+    return {
+      original: rawInput,
+      suggested: bestMatch.title,
+      reason: `'${bestMatch.category}' 공식 곡명 '${bestMatch.title}' 추천`,
+      category: bestMatch.category
+    };
+  }
+
+  return null;
+}
+
+// 1번 섹션 하단 실시간 오타/추천 배너 UI 갱신
+function updateTypoSuggestionsUI() {
+  const wrap = $('typoSuggestionsWrap');
+  if (!wrap) return;
+
+  const currentSongs = parseSongs();
+  const suggestions = [];
+
+  currentSongs.forEach((song, idx) => {
+    const sug = findSongSuggestion(song, $('album')?.value);
+    if (sug && sug.suggested !== song) {
+      suggestions.push({ lineIndex: idx, original: song, suggested: sug.suggested, reason: sug.reason });
+    }
+  });
+
+  if (!suggestions.length) {
+    wrap.innerHTML = '';
+    return;
+  }
+
+  let html = '';
+  suggestions.forEach(s => {
+    html += `
+      <div class="typo-suggestion-banner">
+        <div class="typo-suggestion-text">
+          💡 [곡명 오타/유사곡 제안] <strong>"${escapeAttr(s.original)}"</strong> ➔ <span style="color:#0284c7;font-weight:800">"${escapeAttr(s.suggested)}"</span>
+          <span style="font-size:11px;color:#78350f;margin-left:4px">(${escapeAttr(s.reason)})</span>
+        </div>
+        <button type="button" class="typo-suggestion-btn" onclick="applyTypoSuggestion(${s.lineIndex}, '${escapeAttr(s.suggested)}')">
+          ✨ "${escapeAttr(s.suggested)}"(으)로 수정 적용
+        </button>
+      </div>
+    `;
+  });
+  wrap.innerHTML = html;
+}
+
+window.applyTypoSuggestion = function(lineIdx, newTitle) {
+  const textarea = $('songs');
+  if (!textarea) return;
+  const lines = textarea.value.split(/\r?\n/);
+  if (lines[lineIdx] !== undefined) {
+    lines[lineIdx] = newTitle;
+    textarea.value = lines.join('\n');
+    updateLineNumbers();
+    updateTypoSuggestionsUI();
+    applySongs();
+  }
+};
+
+window.applySuggestedNameToTrack = function(index, newName) {
+  if (tracks[index]) {
+    tracks[index].name = newName;
+  }
+  const textarea = $('songs');
+  if (textarea) {
+    const lines = textarea.value.split(/\r?\n/);
+    if (lines[index] !== undefined) {
+      lines[index] = newName;
+      textarea.value = lines.join('\n');
+    }
+  }
+  updateLineNumbers();
+  updateTypoSuggestionsUI();
+  renderEditors();
+  renderOutput();
+};
+
 // 수록곡 텍스트 파싱
 function parseSongs() {
   return $('songs').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
 }
 
-// 수록곡 입력창 라인 번호 및 카운트 실시간 갱신 (우리 방식)
+// 수록곡 입력창 라인 번호 및 카운트 실시간 갱신
 function updateLineNumbers() {
   const textarea = $('songs');
   const gutter = $('lineNumbers');
@@ -48,7 +272,8 @@ function applySongs() {
       selected: existing ? existing.selected : true,
       visibleCount: existing?.visibleCount || 3,
       allResults: existing?.allResults || [],
-      candidates: existing?.candidates || []
+      candidates: existing?.candidates || [],
+      wasSuggested: existing?.wasSuggested || null
     };
   });
 
@@ -56,6 +281,7 @@ function applySongs() {
   renderEditors();
   renderOutput();
   updateLineNumbers();
+  updateTypoSuggestionsUI();
 }
 
 // 2. 수록곡 목록 체크박스 렌더링 (필드 존재 시에만 동작)
@@ -98,6 +324,31 @@ function renderEditors() {
     const head = document.createElement('h2');
     head.textContent = `${String(i + 1).padStart(2, '0')}. ${t.name}`;
     wrap.appendChild(head);
+
+    // 오타/유사곡 제안으로 자동 검색된 경우 안내 배너 표시
+    if (data[i].wasSuggested && data[i].wasSuggested !== t.name) {
+      const sugBanner = document.createElement('div');
+      sugBanner.style.background = '#fef3c7';
+      sugBanner.style.border = '1px solid #fde68a';
+      sugBanner.style.borderRadius = '8px';
+      sugBanner.style.padding = '8px 12px';
+      sugBanner.style.margin = '6px 0 10px';
+      sugBanner.style.display = 'flex';
+      sugBanner.style.justifyContent = 'space-between';
+      sugBanner.style.alignItems = 'center';
+      sugBanner.style.gap = '8px';
+      sugBanner.style.flexWrap = 'wrap';
+
+      sugBanner.innerHTML = `
+        <span style="font-size:12.5px;color:#92400e;font-weight:700">
+          💡 안내: '${escapeAttr(t.name)}' 검색 결과가 없어 공식 곡명 <strong>'${escapeAttr(data[i].wasSuggested)}'</strong>(으)로 자동 검색되었습니다.
+        </span>
+        <button class="btn" style="padding:4px 9px;font-size:11.5px;background:#f59e0b;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700" onclick="applySuggestedNameToTrack(${i}, '${escapeAttr(data[i].wasSuggested)}')">
+          곡 제목도 '${escapeAttr(data[i].wasSuggested)}'(으)로 변경
+        </button>
+      `;
+      wrap.appendChild(sugBanner);
+    }
 
     const searchRow = document.createElement('div');
     searchRow.className = 'row';
@@ -149,7 +400,7 @@ function renderEditors() {
           data[i].candidates.forEach(x => { x[key] = false; });
           c[key] = true;
           renderEditors();
-          renderOutput();
+          renderOutput(); // 상단 및 하단 미리보기 둘 다 즉시 실시간 동기화
         };
       });
 
@@ -194,13 +445,87 @@ function syncCandidates(i) {
   });
 }
 
-// 4. 미리보기 렌더링: 상단 헤드라인 완전 제외, 우리 크롭 방식 적용(16:9 비율 유지, scale 왜곡 없음)
+// 송북 카드 엘리먼트 생성 헬퍼 (상단/하단 공통 사용)
+function createSongbookCardElement(s, pageItems, containerType) {
+  const songbookCard = document.createElement('div');
+  songbookCard.className = 'single-songbook';
+  songbookCard.dataset.songbookIndex = s + 1;
+
+  // 송북 상단 앨범명 헤더 (입력된 앨범명과 선택 폰트 자동 연동)
+  const albumTitle = $('album')?.value.trim() || '타요의 씽씽극장';
+  const headerDiv = document.createElement('div');
+  headerDiv.className = 'songbook-header';
+  headerDiv.innerHTML = `<h2>${escapeAttr(albumTitle)}</h2>`;
+  songbookCard.appendChild(headerDiv);
+
+  // 2열 4행 그리드
+  const gridDiv = document.createElement('div');
+  gridDiv.className = 'songbook-grid';
+
+  pageItems.forEach(t => {
+    const i = t.order;
+    const c = data[i].candidates.find(x => x.imagePick) || data[i].candidates[0];
+    const item = document.createElement('div');
+    item.className = 'song-item';
+
+    if (c && c.image) {
+      // 16:9 비율 유지 + 모서리 글자 잘림 없는 깔끔한 핏
+      const cropDiv = document.createElement('div');
+      cropDiv.className = 'thumb-crop';
+      const img = document.createElement('img');
+      img.crossOrigin = 'anonymous';
+      img.src = c.image;
+      img.alt = t.name;
+      cropDiv.appendChild(img);
+      item.appendChild(cropDiv);
+    } else {
+      const cropDiv = document.createElement('div');
+      cropDiv.className = 'thumb-crop';
+      const missing = document.createElement('div');
+      missing.className = 'missing';
+      missing.textContent = '후보 미선택';
+      cropDiv.appendChild(missing);
+      item.appendChild(cropDiv);
+    }
+
+    const cap = document.createElement('div');
+    cap.className = 'song-title';
+    cap.textContent = t.name;
+    item.appendChild(cap);
+
+    gridDiv.appendChild(item);
+  });
+
+  songbookCard.appendChild(gridDiv);
+
+  // 송북 개별 저장 액션 (인쇄 시 숨김)
+  const actionsDiv = document.createElement('div');
+  actionsDiv.className = 'songbook-actions no-print';
+  actionsDiv.innerHTML = `
+    <span style="font-size:11px;color:var(--muted);margin-right:auto;align-self:center">송북 ${s + 1} (${pageItems.length}곡)</span>
+    <button class="btn" onclick="exportSingleSongbook(${s}, 'image')">이 송북 이미지 저장</button>
+    <button class="btn success" onclick="exportSingleSongbook(${s}, 'pdf')">이 송북 PDF 저장</button>
+  `;
+  songbookCard.appendChild(actionsDiv);
+
+  return songbookCard;
+}
+
+// ============================================================
+// [요청 반영 1] 상단과 하단 두 군데 송북 미리보기 실시간 동시 렌더링
+// ============================================================
 function renderOutput() {
   const selected = tracks.filter((t, i) => data[i]?.selected);
-  $('count').textContent = selected.length + '곡 선택';
+  const countBadgeText = selected.length + '곡 선택';
 
-  const container = $('previewContainer');
-  container.innerHTML = '';
+  if ($('count')) $('count').textContent = countBadgeText;
+  if ($('countTop')) $('countTop').textContent = countBadgeText;
+
+  const containerBottom = $('previewContainer');
+  const containerTop = $('previewContainerTop');
+
+  if (containerBottom) containerBottom.innerHTML = '';
+  if (containerTop) containerTop.innerHTML = '';
 
   const pageSize = 8;
   const totalSongbooks = Math.ceil(selected.length / pageSize) || 1;
@@ -208,71 +533,19 @@ function renderOutput() {
   for (let s = 0; s < totalSongbooks; s++) {
     const pageItems = selected.slice(s * pageSize, (s + 1) * pageSize);
 
-    const songbookCard = document.createElement('div');
-    songbookCard.className = 'single-songbook';
-    songbookCard.dataset.songbookIndex = s + 1;
+    // 하단 미리보기 렌더링
+    if (containerBottom) {
+      containerBottom.appendChild(createSongbookCardElement(s, pageItems, 'bottom'));
+    }
 
-    // 송북 상단 앨범명 헤더 (입력된 앨범명과 선택 폰트 자동 연동)
-    const albumTitle = $('album')?.value.trim() || '타요의 씽씽극장';
-    const headerDiv = document.createElement('div');
-    headerDiv.className = 'songbook-header';
-    headerDiv.innerHTML = `<h2>${escapeAttr(albumTitle)}</h2>`;
-    songbookCard.appendChild(headerDiv);
-
-    // 2열 4행 그리드
-    const gridDiv = document.createElement('div');
-    gridDiv.className = 'songbook-grid';
-
-    pageItems.forEach(t => {
-      const i = t.order;
-      const c = data[i].candidates.find(x => x.imagePick) || data[i].candidates[0];
-      const item = document.createElement('div');
-      item.className = 'song-item';
-
-      if (c && c.image) {
-        // 우리 크롭 방식: 16:9 비율 래퍼 + object-fit: cover (인위적 1.34배 줌 삭제)
-        const cropDiv = document.createElement('div');
-        cropDiv.className = 'thumb-crop';
-        const img = document.createElement('img');
-        img.crossOrigin = 'anonymous';
-        img.src = c.image;
-        img.alt = t.name;
-        cropDiv.appendChild(img);
-        item.appendChild(cropDiv);
-      } else {
-        const cropDiv = document.createElement('div');
-        cropDiv.className = 'thumb-crop';
-        const missing = document.createElement('div');
-        missing.className = 'missing';
-        missing.textContent = '후보 미선택';
-        cropDiv.appendChild(missing);
-        item.appendChild(cropDiv);
-      }
-
-      const cap = document.createElement('div');
-      cap.className = 'song-title';
-      cap.textContent = t.name;
-      item.appendChild(cap);
-
-      gridDiv.appendChild(item);
-    });
-
-    songbookCard.appendChild(gridDiv);
-
-    // 송북 개별 저장 액션
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'songbook-actions no-print';
-    actionsDiv.innerHTML = `
-      <span style="font-size:11px;color:var(--muted);margin-right:auto;align-self:center">송북 ${s + 1} (${pageItems.length}곡)</span>
-      <button class="btn" onclick="exportSingleSongbook(${s}, 'image')">이 송북 이미지 저장</button>
-      <button class="btn success" onclick="exportSingleSongbook(${s}, 'pdf')">이 송북 PDF 저장</button>
-    `;
-    songbookCard.appendChild(actionsDiv);
-
-    container.appendChild(songbookCard);
+    // 상단 미리보기 렌더링 (동일 데이터로 실시간 동시 반영)
+    if (containerTop) {
+      containerTop.appendChild(createSongbookCardElement(s, pageItems, 'top'));
+    }
   }
 }
 
+// 캔버스 캡처 헬퍼 (테두리 잘림 완전 방지)
 async function renderSongbookToCanvas(songbookElement) {
   const actions = songbookElement.querySelector('.songbook-actions');
   if (actions) actions.style.display = 'none';
@@ -282,7 +555,9 @@ async function renderSongbookToCanvas(songbookElement) {
       scale: 2,
       useCORS: true,
       allowTaint: true,
-      backgroundColor: '#ffffff'
+      backgroundColor: '#ffffff',
+      scrollX: 0,
+      scrollY: 0
     });
     return canvas;
   } finally {
@@ -290,9 +565,10 @@ async function renderSongbookToCanvas(songbookElement) {
   }
 }
 
+// 개별 송북 내보내기 (PDF / 이미지)
 window.exportSingleSongbook = async function(index, format) {
-  const songbooks = document.querySelectorAll('.single-songbook');
-  const target = songbooks[index];
+  const songbooks = document.querySelectorAll('#previewContainer .single-songbook');
+  const target = songbooks[index] || document.querySelectorAll('.single-songbook')[index];
   if (!target) return;
 
   const title = $('album')?.value || '타요_송북';
@@ -319,82 +595,187 @@ window.exportSingleSongbook = async function(index, format) {
       window.print();
       return;
     }
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' });
+    // A4 규격 (210mm x 297mm) 설정 및 안전 여백(10mm) 적용 -> 하단 점선 테두리 잘림 완전 방지!
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageWidth = 210;
+    const pageHeight = 297;
+    const margin = 10;
+    const maxWidth = pageWidth - (margin * 2);   // 190mm
+    const maxHeight = pageHeight - (margin * 2); // 277mm
+
+    const canvasRatio = canvas.height / canvas.width;
+    let finalWidth = maxWidth;
+    let finalHeight = finalWidth * canvasRatio;
+
+    if (finalHeight > maxHeight) {
+      finalHeight = maxHeight;
+      finalWidth = finalHeight / canvasRatio;
+    }
+
+    const posX = (pageWidth - finalWidth) / 2;
+    const posY = (pageHeight - finalHeight) / 2;
+
     const imgData = canvas.toDataURL('image/jpeg', 0.95);
-    pdf.addImage(imgData, 'JPEG', 5, 5, 138, (canvas.height * 138) / canvas.width);
+    pdf.addImage(imgData, 'JPEG', posX, posY, finalWidth, finalHeight);
     pdf.save(`${slug(title)}_송북_${index + 1}.pdf`);
   }
 };
 
-$('downloadAllPdfBtn').onclick = async () => {
-  const songbooks = document.querySelectorAll('.single-songbook');
+// ============================================================
+// [요청 반영] PDF 내보내기: A4 세로 1장 꽉 차게 & A4 가로 2장 모아찍기 지원
+// ============================================================
+async function downloadAllPdf(mode = 'portrait') {
+  const songbooks = document.querySelectorAll('#previewContainer .single-songbook');
   if (!songbooks.length) { alert('선택된 곡이 없습니다.'); return; }
 
-  const btn = $('downloadAllPdfBtn');
-  btn.disabled = true;
-  btn.textContent = 'PDF 생성 중…';
-
-  try {
-    const { jsPDF } = window.jspdf || {};
-    if (!jsPDF || typeof html2canvas === 'undefined') {
-      window.print();
-      return;
-    }
-
-    const title = $('album')?.value || '타요_송북';
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' });
-
-    for (let i = 0; i < songbooks.length; i++) {
-      if (i > 0) pdf.addPage('a5', 'portrait');
-      const canvas = await renderSongbookToCanvas(songbooks[i]);
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      pdf.addImage(imgData, 'JPEG', 5, 5, 138, (canvas.height * 138) / canvas.width);
-    }
-
-    pdf.save(`${slug(title)}_전체송북.pdf`);
-  } catch (err) {
-    alert('PDF 직접 저장 실패: 인쇄 창으로 전환합니다. (' + err.message + ')');
+  const title = $('album')?.value || '타요_송북';
+  const { jsPDF } = window.jspdf || {};
+  if (!jsPDF || typeof html2canvas === 'undefined') {
     window.print();
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '📄 전체 송북 PDF 다운로드';
+    return;
   }
-};
 
-$('downloadAllImgBtn').onclick = async () => {
-  const songbooks = document.querySelectorAll('.single-songbook');
-  if (!songbooks.length) { alert('선택된 곡이 없습니다.'); return; }
+  // 모드별 안내
+  if (mode === 'landscape') {
+    // A4 가로 (297mm x 210mm) 한 페이지에 송북 2장씩 나란히 배치 (반접기/절단용)
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pageWidth = 297;
+    const pageHeight = 210;
+    const margin = 8;
+    const gap = 6;
+    const slotWidth = (pageWidth - (margin * 2) - gap) / 2; // ~137.5mm
+    const slotHeight = pageHeight - (margin * 2);           // 194mm
 
-  const btn = $('downloadAllImgBtn');
-  btn.disabled = true;
-  btn.textContent = '이미지 생성 중…';
+    for (let i = 0; i < songbooks.length; i += 2) {
+      if (i > 0) pdf.addPage('a4', 'landscape');
 
-  try {
-    const title = $('album')?.value || '타요_송북';
-    for (let i = 0; i < songbooks.length; i++) {
-      const canvas = await renderSongbookToCanvas(songbooks[i]);
-      canvas.toBlob(blob => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${slug(title)}_송북_${i + 1}.png`;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      }, 'image/png');
-      await new Promise(r => setTimeout(r, 400));
+      // 1번째 카드 (왼쪽)
+      const canvas1 = await renderSongbookToCanvas(songbooks[i]);
+      const ratio1 = canvas1.height / canvas1.width;
+      let w1 = slotWidth;
+      let h1 = w1 * ratio1;
+      if (h1 > slotHeight) {
+        h1 = slotHeight;
+        w1 = h1 / ratio1;
+      }
+      const x1 = margin + (slotWidth - w1) / 2;
+      const y1 = margin + (slotHeight - h1) / 2;
+      const img1 = canvas1.toDataURL('image/jpeg', 0.95);
+      pdf.addImage(img1, 'JPEG', x1, y1, w1, h1);
+
+      // 2번째 카드 (오른쪽 - 있을 경우)
+      if (i + 1 < songbooks.length) {
+        const canvas2 = await renderSongbookToCanvas(songbooks[i + 1]);
+        const ratio2 = canvas2.height / canvas2.width;
+        let w2 = slotWidth;
+        let h2 = w2 * ratio2;
+        if (h2 > slotHeight) {
+          h2 = slotHeight;
+          w2 = h2 / ratio2;
+        }
+        const x2 = margin + slotWidth + gap + (slotWidth - w2) / 2;
+        const y2 = margin + (slotHeight - h2) / 2;
+        const img2 = canvas2.toDataURL('image/jpeg', 0.95);
+        pdf.addImage(img2, 'JPEG', x2, y2, w2, h2);
+      }
     }
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '🖼️ 전체 송북 이미지(PNG) 저장';
-  }
-};
 
-// 단일 곡 유튜브 후보 검색 함수 (/api/search 지원 및 YouTube Data API v3 연동)
+    pdf.save(`${slug(title)}_A4가로_2장모아찍기_송북.pdf`);
+  } else {
+    // A4 세로 (210mm x 297mm) 1장씩 가장 큰 크기로 출력 (점선 잘림 완전 방지)
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageWidth = 210;
+    const pageHeight = 297;
+    const margin = 10;
+    const maxWidth = pageWidth - (margin * 2);   // 190mm
+    const maxHeight = pageHeight - (margin * 2); // 277mm
+
+    for (let i = 0; i < songbooks.length; i++) {
+      if (i > 0) pdf.addPage('a4', 'portrait');
+      const canvas = await renderSongbookToCanvas(songbooks[i]);
+      const canvasRatio = canvas.height / canvas.width;
+      let finalWidth = maxWidth;
+      let finalHeight = finalWidth * canvasRatio;
+
+      if (finalHeight > maxHeight) {
+        finalHeight = maxHeight;
+        finalWidth = finalHeight / canvasRatio;
+      }
+
+      const posX = (pageWidth - finalWidth) / 2;
+      const posY = (pageHeight - finalHeight) / 2;
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      pdf.addImage(imgData, 'JPEG', posX, posY, finalWidth, finalHeight);
+    }
+
+    pdf.save(`${slug(title)}_전체송북_A4.pdf`);
+  }
+}
+
+// 전체 송북 PNG 이미지 일괄 다운로드
+async function downloadAllImages() {
+  const songbooks = document.querySelectorAll('#previewContainer .single-songbook');
+  if (!songbooks.length) { alert('선택된 곡이 없습니다.'); return; }
+  const title = $('album')?.value || '타요_송북';
+
+  for (let i = 0; i < songbooks.length; i++) {
+    const canvas = await renderSongbookToCanvas(songbooks[i]);
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${slug(title)}_송북_${i + 1}.png`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, 'image/png');
+  }
+}
+
+// PDF 및 이미지 다운로드 버튼 바인딩 (상단/하단 공통)
+['downloadAllPdfBtn', 'downloadAllPdfBtnTop'].forEach(id => {
+  if ($(id)) $(id).onclick = () => downloadAllPdf('portrait');
+});
+['downloadAllPdfLandscapeBtn', 'downloadAllPdfLandscapeBtnTop'].forEach(id => {
+  if ($(id)) $(id).onclick = () => downloadAllPdf('landscape');
+});
+['downloadAllImgBtn', 'downloadAllImgBtnTop'].forEach(id => {
+  if ($(id)) $(id).onclick = downloadAllImages;
+});
+
+// ============================================================
+// 유튜브 검색 및 자동 오타 보완 재검색 엔진
+// ============================================================
 async function searchTrackCandidates(trackName) {
   const album = ($('album')?.value || '').trim();
   const query = (album ? album + ' ' + trackName : trackName).trim();
 
-  // 1. 로컬 또는 원격 백엔드 /api/search 시도
+  // 1차 검색 실행
+  let results = await executeSearchQuery(query);
+
+  // 만약 검색 결과가 없다면 오타/유사곡 추천을 통한 2차 자동 검색 실행
+  if (!results || results.length === 0) {
+    const suggestion = findSongSuggestion(trackName, album);
+    if (suggestion && suggestion.suggested !== trackName) {
+      const fallbackQuery = (album ? album + ' ' + suggestion.suggested : suggestion.suggested).trim();
+      const fallbackResults = await executeSearchQuery(fallbackQuery);
+      if (fallbackResults && fallbackResults.length > 0) {
+        // 추천으로 찾은 결과임을 마킹
+        fallbackResults.forEach(r => {
+          r.wasSuggested = suggestion.suggested;
+          r.originalQuery = trackName;
+        });
+        return fallbackResults;
+      }
+    }
+  }
+
+  return results;
+}
+
+// 쿼리 검색 실행 함수 (자체 서버 / YouTube Data API)
+async function executeSearchQuery(query) {
+  // 1. 자체 백엔드(/api/search) 시도
   if (backendAvailable !== false) {
     try {
       const resp = await fetch('/api/search', {
@@ -410,7 +791,8 @@ async function searchTrackCandidates(trackName) {
             id: c.id,
             title: c.title || '',
             url: c.url || `https://www.youtube.com/watch?v=${c.id}`,
-            image: c.thumbnail || `https://i.ytimg.com/vi/${c.id}/hqdefault.jpg`,
+            // 16:9 비율 유지 (검은 레터박스 방지를 위해 mqdefault 및 순수 16:9 썸네일 사용)
+            image: c.thumbnail || `https://i.ytimg.com/vi/${c.id}/mqdefault.jpg`,
             duration: c.duration_str || secondsToDuration(c.duration || 0),
             seconds: c.duration || 0
           }));
@@ -426,30 +808,37 @@ async function searchTrackCandidates(trackName) {
   // 2. YouTube Data API v3 조회
   const key = getApiKey();
   if (!key) {
-    throw new Error('API_KEY_REQUIRED');
+    return [];
   }
 
   const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=15&order=relevance&q=${encodeURIComponent(query)}&key=${encodeURIComponent(key)}`;
   const sr = await fetch(searchUrl);
   const sj = await sr.json();
-  if (!sr.ok) throw new Error(sj.error?.message || 'YouTube 검색 실패');
+  if (!sr.ok) return [];
 
   const ids = (sj.items || []).map(x => x.id?.videoId).filter(Boolean);
-  if (!ids.length) throw new Error('검색 결과가 없습니다.');
+  if (!ids.length) return [];
 
   const detailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,snippet&id=${ids.join(',')}&key=${encodeURIComponent(key)}`;
   const dr = await fetch(detailsUrl);
   const dj = await dr.json();
-  if (!dr.ok) throw new Error(dj.error?.message || '상세 정보 획득 실패');
+  if (!dr.ok) return [];
 
-  return (dj.items || []).map(v => ({
-    id: v.id,
-    title: v.snippet?.title || '',
-    url: `https://www.youtube.com/watch?v=${v.id}`,
-    image: v.snippet?.thumbnails?.maxres?.url || v.snippet?.thumbnails?.medium?.url || v.snippet?.thumbnails?.high?.url || v.snippet?.thumbnails?.default?.url || `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`,
-    duration: secondsToDuration(isoDurationToSeconds(v.contentDetails?.duration || '')),
-    seconds: isoDurationToSeconds(v.contentDetails?.duration || '')
-  }));
+  return (dj.items || []).map(v => {
+    // 16:9 썸네일 우선순위: maxres(1280x720) 또는 medium(320x180) -> mqdefault.jpg (검은 바 없음)
+    const imgUrl = v.snippet?.thumbnails?.maxres?.url || 
+                   v.snippet?.thumbnails?.medium?.url || 
+                   `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`;
+
+    return {
+      id: v.id,
+      title: v.snippet?.title || '',
+      url: `https://www.youtube.com/watch?v=${v.id}`,
+      image: imgUrl,
+      duration: secondsToDuration(isoDurationToSeconds(v.contentDetails?.duration || '')),
+      seconds: isoDurationToSeconds(v.contentDetails?.duration || '')
+    };
+  });
 }
 
 // 개별 곡 재검색
@@ -461,37 +850,36 @@ async function searchYouTube(i, button) {
     const track = tracks[i];
     const results = await searchTrackCandidates(track.name);
 
-    data[i].allResults = results;
-    data[i].visibleCount = 3;
-    data[i].candidates = results.slice(0, 3).map((r, idx) => ({
-      ...r,
-      imagePick: idx === 0,
-      audioPick: idx === 0
-    }));
+    if (results && results.length > 0) {
+      data[i].allResults = results;
+      data[i].visibleCount = 3;
+      data[i].wasSuggested = results[0]?.wasSuggested || null;
+      data[i].candidates = results.slice(0, 3).map((r, idx) => ({
+        ...r,
+        imagePick: idx === 0,
+        audioPick: idx === 0
+      }));
+    } else {
+      alert(`'${track.name}'에 대한 유튜브 검색 결과가 없습니다.`);
+    }
 
     renderEditors();
     renderOutput();
   } catch (e) {
-    if (e.message === 'API_KEY_REQUIRED') {
-      alert('YouTube API 키가 필요합니다. 3번 섹션에 YouTube Data API v3 키를 입력해 주세요.');
-      $('ytkey')?.focus();
-    } else {
-      alert('유튜브 후보 검색 오류: ' + e.message);
-    }
+    alert('유튜브 후보 검색 오류: ' + e.message);
   } finally {
     button.disabled = false;
     button.textContent = '유튜브 후보 재검색';
   }
 }
 
-// [요청 반영] '유튜브 후보 찾기' 클릭 시 전곡 일괄 조회
+// '유튜브 후보 찾기' 클릭 시 전곡 일괄 조회
 async function searchAllCandidates() {
-  // 먼저 입력된 수록곡 적용
   applySongs();
 
   const selectedIndices = tracks.map((t, idx) => idx).filter(i => data[i]?.selected);
   if (!selectedIndices.length) {
-    alert('조회할 수록곡이 없습니다. 수록곡 목록을 입력하고 추출을 선택해 주세요.');
+    alert('조회할 수록곡이 없습니다. 수록곡 목록을 입력해 주세요.');
     return;
   }
 
@@ -504,9 +892,6 @@ async function searchAllCandidates() {
     statusBox.style.borderColor = '#bae6fd';
     statusBox.style.color = '#0369a1';
   }
-
-  let successCount = 0;
-  let failCount = 0;
 
   for (let step = 0; step < selectedIndices.length; step++) {
     const i = selectedIndices[step];
@@ -521,16 +906,20 @@ async function searchAllCandidates() {
 
     try {
       const candidates = await searchTrackCandidates(trackName);
-      data[i].allResults = candidates;
-      data[i].visibleCount = 3;
-      data[i].candidates = candidates.slice(0, 3).map((r, idx) => ({
-        ...r,
-        imagePick: idx === 0, // 1번 이미지를 송북에 자동 적용
-        audioPick: idx === 0  // 1번 음원 기본 선택
-      }));
-      successCount++;
+
+      if (candidates && candidates.length > 0) {
+        data[i].allResults = candidates;
+        data[i].visibleCount = 3;
+        data[i].wasSuggested = candidates[0]?.wasSuggested || null;
+        data[i].candidates = candidates.slice(0, 3).map((r, idx) => ({
+          ...r,
+          imagePick: idx === 0,
+          audioPick: idx === 0
+        }));
+      } else {
+        throw new Error('결과 없음');
+      }
     } catch (err) {
-      failCount++;
       const album = ($('album')?.value || '').trim();
       const query = (album ? album + ' ' + trackName : trackName).trim();
       const fallbackList = [
@@ -568,10 +957,8 @@ async function searchAllCandidates() {
       data[i].allResults = fallbackList;
       data[i].visibleCount = 3;
       data[i].candidates = fallbackList;
-      console.warn(`[${trackName}] 검색 API 연결 불가 -> 3개 기본 후보 적용:`, err);
     }
 
-    // 각 곡의 3개 후보와 1번 이미지가 찾아질 때마다 편집기와 송북에 실시간 동시 반영!
     renderEditors();
     renderOutput();
   }
@@ -587,13 +974,8 @@ async function searchAllCandidates() {
     statusBox.style.background = '#f0fdf4';
     statusBox.style.borderColor = '#bbf7d0';
     statusBox.style.color = '#166534';
-    statusBox.innerHTML = `🎉 <strong>일괄 조회 완료!</strong> 모든 곡의 유튜브 후보 3개가 나타났으며, <strong>각 곡의 1번 이미지가 송북 미리보기에 자동 적용</strong>되었습니다.`;
+    statusBox.innerHTML = `🎉 <strong>일괄 조회 완료!</strong> 각 곡의 유튜브 후보가 조회되었으며, <strong>상단과 하단 미리보기에 실시간 반영</strong>되었습니다.`;
   }
-
-  // 송북 미리보기 영역으로 부드럽게 스크롤
-  setTimeout(() => {
-    $('previewPanel')?.scrollIntoView({ behavior: 'smooth' });
-  }, 300);
 }
 
 function getApiKey() {
@@ -623,36 +1005,37 @@ $('savePreviewHtml').onclick = () => {
   font-family: 'Cafe24Ssurround';
   src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2105_2@1.0/Cafe24Ssurround.woff') format('woff');
 }
-:root{
-  --title-font: 'NanumSquareRound', 'Pretendard', sans-serif;
-}
+:root{ --title-font: 'NanumSquareRound', 'Pretendard', sans-serif; }
 body.font-round { --title-font: 'NanumSquareRound', 'Pretendard', sans-serif; }
 body.font-jua { --title-font: 'Jua', 'NanumSquareRound', sans-serif; }
 body.font-ssurround { --title-font: 'Cafe24Ssurround', 'NanumSquareRound', sans-serif; }
 body.font-pretendard { --title-font: 'Pretendard', sans-serif; }
 body.font-system { --title-font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
-body{font-family:'Pretendard',sans-serif;margin:16px;background:#f8fafc;color:#1e293b;display:flex;flex-direction:column;align-items:center;gap:20px}
-.single-songbook{border:1px dashed #94a3b8;border-radius:14px;padding:16px 14px 18px;background:#fff;width:100%;max-width:440px;display:flex;flex-direction:column;box-shadow:0 4px 16px rgba(0,0,0,0.06)}
+body{font-family:'Pretendard',sans-serif;margin:16px;background:#f8fafc;color:#1e293b}
+.songbooks-container{display:flex;flex-direction:row;flex-wrap:wrap;gap:20px;justify-content:center}
+.single-songbook{border:2px dashed #94a3b8;border-radius:12px;padding:16px 14px 18px;background:#fff;width:calc(50% - 12px);max-width:480px;min-width:320px;box-sizing:border-box;display:flex;flex-direction:column;box-shadow:0 4px 16px rgba(0,0,0,0.06)}
 .songbook-header{display:flex;justify-content:center;align-items:center;padding-bottom:6px;margin-bottom:12px;text-align:center}
-.songbook-header h2{margin:0;font-size:23px;font-weight:900;color:#ef4444;font-family:var(--title-font);text-align:center}
+.songbook-header h2{margin:0;font-size:22px;font-weight:900;color:#ef4444;font-family:var(--title-font);text-align:center}
 .songbook-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4, minmax(0, 1fr));gap:12px 10px}
 .song-item{border:none;padding:0;background:transparent;display:flex;flex-direction:column;align-items:center;text-align:center}
-.thumb-crop{width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:6px;background:#e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.08);position:relative}
-.thumb-crop img{width:100%;height:100%;object-fit:cover;transform:scale(1.18);display:block;border-radius:6px}
+.thumb-crop{width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:4px;background:#0f172a;box-shadow:0 1px 3px rgba(0,0,0,0.08);position:relative}
+.thumb-crop img{width:100%;height:100%;object-fit:cover;object-position:center;transform:none!important;display:block;border-radius:4px}
 .song-item .song-title{font-family:var(--title-font);font-size:12.5px;font-weight:800;line-height:1.25;margin-top:6px;color:#1e293b;text-align:center;letter-spacing:-0.02em}
 .songbook-actions{display:none}
 @media print{
   @page{size:A4 portrait;margin:8mm}
   body{background:white;margin:0}
-  .single-songbook{page-break-after:always;border:1px dashed #000!important;max-width:none!important;margin:0 0 12mm 0;box-shadow:none!important;padding:8mm!important}
+  .single-songbook{page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid;border:2px dashed #000!important;max-width:100%!important;margin:0 auto;box-shadow:none!important;padding:6mm 8mm 8mm 8mm!important}
   .songbook-header h2{color:#ef4444!important;font-family:var(--title-font)!important;font-weight:900!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .thumb-crop img{-webkit-print-color-adjust:exact;print-color-adjust:exact;object-fit:cover!important;transform:scale(1.18)!important}
+  .thumb-crop img{-webkit-print-color-adjust:exact;print-color-adjust:exact;object-fit:cover!important;transform:none!important}
   .song-item .song-title{font-family:var(--title-font)!important;font-weight:800!important}
 }
 </style>
 </head>
 <body class="${currentFontClass}">
+<div class="songbooks-container">
 ${previewHtml}
+</div>
 </body>
 </html>`;
 
@@ -739,7 +1122,7 @@ for i, t in enumerate(tracks, 1):
     ]
     subprocess.run(cmd)
 
-print(f"\n모든 곡이 '{folder}' 폴더에 성공적으로 저장되었습니다!")
+print(f"\\n모든 곡이 '{folder}' 폴더에 성공적으로 저장되었습니다!")
 `;
   download(pyCode, `${slug(albumName)}_전곡다운로더.py`, 'text/x-python;charset=utf-8');
 };
@@ -811,8 +1194,8 @@ if ($('ytkey')) {
 $('apply').onclick = searchAllCandidates;
 if ($('all')) $('all').onclick = () => { tracks.forEach((t, i) => data[i].selected = true); renderTracks(); renderEditors(); renderOutput(); };
 if ($('none')) $('none').onclick = () => { tracks.forEach((t, i) => data[i].selected = false); renderTracks(); renderEditors(); renderOutput(); };
-$('album').onchange = renderEditors;
-$('album').oninput = renderOutput;
+$('album').onchange = () => { renderEditors(); updateTypoSuggestionsUI(); };
+$('album').oninput = () => { renderOutput(); updateTypoSuggestionsUI(); };
 $('csvin').onclick = () => $('csvfile').click();
 $('csvfile').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
@@ -824,11 +1207,15 @@ $('csvfile').onchange = async e => {
   renderEditors();
   renderOutput();
   updateLineNumbers();
+  updateTypoSuggestionsUI();
 };
 
-// 수록곡 입력창 실시간 라인 번호 동기화
+// 수록곡 입력창 실시간 라인 번호 & 오타 제안 동기화
 if ($('songs')) {
-  $('songs').addEventListener('input', updateLineNumbers);
+  $('songs').addEventListener('input', () => {
+    updateLineNumbers();
+    updateTypoSuggestionsUI();
+  });
   $('songs').addEventListener('scroll', () => {
     if ($('lineNumbers')) $('lineNumbers').scrollTop = $('songs').scrollTop;
   });
@@ -859,3 +1246,4 @@ renderTracks();
 renderEditors();
 renderOutput();
 updateLineNumbers();
+updateTypoSuggestionsUI();
